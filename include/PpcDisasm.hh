@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 #include "ReservedVector.hh"
 #include "DataSource.hh"
@@ -35,24 +36,18 @@ enum class InstOperation {
   kPs_div, kPs_sub, kPs_add, kPs_sel, kPs_res, kPs_mul, kPs_rsqrte, kPs_msub,
   kPs_madd, kPs_nmsub, kPs_nmadd, kPs_neg, kPs_mr, kPs_nabs, kPs_abs, kPs_sum0,
   kPs_sum1, kPs_muls0, kPs_muls1, kPs_madds0, kPs_madds1, kPs_cmpu0, kPs_cmpo0, kPs_cmpu1,
-  kPs_cmpo1, kPs_merge00, kPs_merge01, kPs_merge10, kPs_merge11, kDcbz_l,
-};
-
-union BinInst {
-  struct {
-    uint32_t _opcode : 6;
-    uint32_t _rest : 26;
-  };
-  uint32_t _raw;
+  kPs_cmpo1, kPs_merge00, kPs_merge01, kPs_merge10, kPs_merge11, kDcbz_l, kInvalid,
 };
 
 enum class InstFlags : uint32_t {
-  kNone         = 0b0000,
-  kAll          = 0b1111,
-  kWritesCR0    = 0b0001,
-  kWritesXER    = 0b0010,
-  kWritesLR     = 0b0100,
-  kAbsoluteAddr = 0b1000,
+  kNone         = 0b000000,
+  kAll          = 0b111111,
+  kWritesRecord = 0b000001,
+  kWritesXER    = 0b000010,
+  kWritesLR     = 0b000100,
+  kAbsoluteAddr = 0b001000,
+  kPsLoadsOne   = 0b010000,
+  kLongMode     = 0b100000,
 };
 
 constexpr InstFlags operator|(InstFlags lhs, InstFlags rhs) {
@@ -75,7 +70,16 @@ constexpr bool any_flags(InstFlags flags) {
 }
 
 struct MetaInst {
+  uint32_t _binst;
+  // All data sources being read
   reserved_vector<DataSource, 3> _reads;
-  DataSource _writes;
+  // Instruction immediates
+  reserved_vector<ImmSource, 3> _immediates;
+  // Output location
+  reserved_vector<DataSource, 2> _writes;
+
+  InstOperation _op;
   InstFlags _flags;
 };
+
+void disasm_single(uint32_t raw_inst, MetaInst& meta_out);
