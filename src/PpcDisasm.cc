@@ -7,6 +7,7 @@
 #include "PpcDisasm.hh"
 #include "ReservedVector.hh"
 
+namespace decomp {
 namespace {
 constexpr uint32_t gen_mask(uint32_t left, uint32_t right) {
   return static_cast<uint32_t>(((uint64_t{1} << (32 - left)) - 1) &
@@ -19,11 +20,11 @@ public:
 
 public:
   constexpr uint32_t ext_range(uint32_t left, uint32_t right) const {
-    return (_bytes >> (31 - right)) & gen_mask(left, right);
+    return (_bytes & gen_mask(left, right)) >> (31 - right);
   }
   constexpr int32_t ext_range_signed(uint32_t left, uint32_t right) const {
-    if (_bytes >> (31 - left) & 1) {
-      return static_cast<int32_t>(gen_mask(0, left) | ext_range(left, right));
+    if ((_bytes >> (31 - left)) & 1) {
+      return static_cast<int32_t>(gen_mask(0, left + (31 - right)) | ext_range(left, right));
     }
     return static_cast<int32_t>(ext_range(left, right));
   }
@@ -1344,14 +1345,22 @@ void disasm_single(uint32_t raw_inst, MetaInst& meta_out) {
 
     case 14:
       meta_out._op = InstOperation::kAddi;
-      meta_out._reads.push_back(binst.ra());
+      if (binst.ra() != GPR::kR0) {
+        meta_out._reads.push_back(binst.ra());
+      } else {
+        meta_out._immediates.push_back(AuxImm{0});
+      }
       meta_out._immediates.push_back(binst.simm());
       meta_out._writes.push_back(binst.rd());
       break;
 
     case 15:
       meta_out._op = InstOperation::kAddis;
-      meta_out._reads.push_back(binst.ra());
+      if (binst.ra() != GPR::kR0) {
+        meta_out._reads.push_back(binst.ra());
+      } else {
+        meta_out._immediates.push_back(AuxImm{0});
+      }
       meta_out._immediates.push_back(binst.simm());
       meta_out._writes.push_back(binst.rd());
       break;
@@ -1661,3 +1670,4 @@ void disasm_single(uint32_t raw_inst, MetaInst& meta_out) {
       break;
   }
 }
+}  // namespace decomp

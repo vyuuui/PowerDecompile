@@ -3,7 +3,7 @@ CCFLAGS_SHARED  := --std=c++17 -Wall -Werror -fno-exceptions -fno-rtti -MD -MP
 CCFLAGS_DEBUG   := $(CCFLAGS_SHARED) -g -O0
 CCFLAGS_RELEASE := $(CCFLAGS_SHARED) -O2
 CCFLAGS         := $(CCFLAGS_DEBUG)
-BASE_LIBS       :=
+BASE_LIBS       := -lfmt
 
 BUILD_DIR       := build
 BIN_DIR         := bin
@@ -18,7 +18,7 @@ all : $(BIN_DIR)/decompile
 
 $(BIN_DIR)/decompile : $(INTERMEDIATES)
 	@mkdir -p $(@D)
-	$(CC) $(CCFLAGS) $^ -o $@
+	$(CC) $(CCFLAGS) $(BASE_LIBS) $^ -o $@
 
 $(BUILD_DIR)/%.o : $(SRC_DIR)/%.cc
 	@mkdir -p $(@D)

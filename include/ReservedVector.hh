@@ -6,7 +6,7 @@
 #include <memory>
 #include <utility>
 
-
+namespace decomp {
 template <typename T>
 class _vector_base {
 public:
@@ -277,3 +277,4 @@ public:
     }
   }
 };
+}  // namespace decomp

@@ -2,6 +2,7 @@
 
 #include <type_traits>
 
+namespace decomp {
 template <typename T>
 constexpr T bit_or(T lhs, T rhs) {
   using PrimType = std::underlying_type_t<T>;
@@ -34,9 +35,10 @@ template <typename T>
 constexpr bool any_flags(T flags) {
   return (flags & T::kAll) != T::kNone;
 }
+}  // namespace decomp
 
 #define GEN_FLAG_OPERATORS(EnumType) \
-  constexpr EnumType operator|(EnumType lhs, EnumType rhs) { return bit_or(lhs, rhs); } \
-  constexpr EnumType operator&(EnumType lhs, EnumType rhs) { return bit_and(lhs, rhs); } \
-  constexpr EnumType operator^(EnumType lhs, EnumType rhs) { return bit_xor(lhs, rhs); } \
-  constexpr EnumType operator~(EnumType flags) { return bit_not(flags); }
+  constexpr EnumType operator|(EnumType lhs, EnumType rhs) { return ::decomp::bit_or(lhs, rhs); } \
+  constexpr EnumType operator&(EnumType lhs, EnumType rhs) { return ::decomp::bit_and(lhs, rhs); } \
+  constexpr EnumType operator^(EnumType lhs, EnumType rhs) { return ::decomp::bit_xor(lhs, rhs); } \
+  constexpr EnumType operator~(EnumType flags) { return ::decomp::bit_not(flags); }

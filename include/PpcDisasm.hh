@@ -8,6 +8,7 @@
 #include "FlagsEnum.hh"
 #include "ReservedVector.hh"
 
+namespace decomp {
 // Operation as determined by the opcode and possible function code
 enum class InstOperation {
   kAdd, kAddc, kAdde, kAddi, kAddic, kAddicDot, kAddis, kAddme,
@@ -61,8 +62,9 @@ struct MetaInst {
   // Output location
   reserved_vector<DataSource, 2> _writes;
 
-  InstOperation _op;
-  InstFlags _flags;
+  InstOperation _op = InstOperation::kInvalid;
+  InstFlags _flags = InstFlags::kNone;
 };
 
 void disasm_single(uint32_t raw_inst, MetaInst& meta_out);
+}  // namespace decomp

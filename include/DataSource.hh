@@ -5,6 +5,7 @@
 
 #include "FlagsEnum.hh"
 
+namespace decomp {
 enum class GPR {
   kR0, kR1, kR2, kR3,
   kR4, kR5, kR6, kR7,
@@ -127,3 +128,4 @@ using DataSource =
   std::variant<GPR, FPR, CRBit, MemRegOff, MemRegReg, SPR, TBR, FPSCRBit>;
 using ImmSource =
   std::variant<SIMM, UIMM, RelBranch, AuxImm>;
+}  // namespace decomp
