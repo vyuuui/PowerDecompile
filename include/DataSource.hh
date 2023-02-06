@@ -25,21 +25,28 @@ enum class FPR {
   kF28, kF29, kF30, kF31,
 };
 
-enum class CRField {
-  kCR0, kCR1, kCR2, kCR3,
-  kCR4, kCR5, kCR6, kCR7,
-};
+enum class CRBit : uint32_t {
+  kNone = 0,
+  kAll  = 0xffffffff,
 
-enum class CRFlag {
-  kLt, kGt, kEq, kSo,
-};
+  kCr0  = 0b1111u << 0,
+  kCr1  = 0b1111u << 4,
+  kCr2  = 0b1111u << 8,
+  kCr3  = 0b1111u << 12,
+  kCr4  = 0b1111u << 16,
+  kCr5  = 0b1111u << 20,
+  kCr6  = 0b1111u << 24,
+  kCr7  = 0b1111u << 28,
 
-union CRBit {
-  struct {
-    CRFlag _flag : 2;
-    CRField _field : 3;
-  } _parts;
-  uint32_t _val;
+  kLt   = 1u << 0,
+  kGt   = 1u << 1,
+  kEq   = 1u << 2,
+  kSo   = 1u << 3,
+
+  kFx   = 1u << 4,
+  kFex  = 1u << 5,
+  kVx   = 1u << 6,
+  kOx   = 1u << 7,
 };
 
 struct MemRegOff {
@@ -76,9 +83,81 @@ struct AuxImm {
   uint32_t _val;
 };
 
-struct FPSCR { uint8_t _dummy = 0; };
+enum class FPSCRBit : uint32_t {
+  kNone          = 0,
+  kAll           = 0xffffffff,
+  kExceptionMask = 0b00000000111000000001111111111001,
+  kWriteMask     = 0b11111111111111111111111111111001,
+
+  kFx            = 1u << 0,
+  kFex           = 1u << 1,
+  kVx            = 1u << 2,
+  kOx            = 1u << 3,
+  kUx            = 1u << 4,
+  kZx            = 1u << 5,
+  kXx            = 1u << 6,
+  kVxsnan        = 1u << 7,
+  kVxisi         = 1u << 8,
+  kVxidi         = 1u << 9,
+  kVxzdz         = 1u << 10,
+  kVximz         = 1u << 11,
+  kVxvc          = 1u << 12,
+  kFr            = 1u << 13,
+  kFi            = 1u << 14,
+  kFprf          = 0b11111 << 15,
+  kFpc           = 1 << 15,
+  kFpcc          = 0b1111 << 16,
+  kVxsoft        = 1u << 21,
+  kVxsqrt        = 1u << 22,
+  kVxcvi         = 1u << 23,
+  kVe            = 1u << 24,
+  kOe            = 1u << 25,
+  kUe            = 1u << 26,
+  kZe            = 1u << 27,
+  kXe            = 1u << 28,
+  kNi            = 1u << 29,
+  kRn            = 0b11u << 30,
+};
+
+constexpr CRBit operator|(CRBit lhs, CRBit rhs) {
+  return static_cast<CRBit>(static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs));
+}
+constexpr CRBit operator&(CRBit lhs, CRBit rhs) {
+  return static_cast<CRBit>(static_cast<uint32_t>(lhs) & static_cast<uint32_t>(rhs));
+}
+constexpr CRBit operator^(CRBit lhs, CRBit rhs) {
+  return static_cast<CRBit>(static_cast<uint32_t>(lhs) ^ static_cast<uint32_t>(rhs));
+}
+constexpr CRBit operator~(CRBit flags) {
+  return flags ^ CRBit::kAll;
+}
+constexpr bool check_flags(CRBit check, CRBit against) {
+  return (check & against & CRBit::kAll) != CRBit::kNone;
+}
+constexpr bool any_flags(CRBit flags) {
+  return (flags & CRBit::kAll) != CRBit::kNone;
+}
+
+constexpr FPSCRBit operator|(FPSCRBit lhs, FPSCRBit rhs) {
+  return static_cast<FPSCRBit>(static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs));
+}
+constexpr FPSCRBit operator&(FPSCRBit lhs, FPSCRBit rhs) {
+  return static_cast<FPSCRBit>(static_cast<uint32_t>(lhs) & static_cast<uint32_t>(rhs));
+}
+constexpr FPSCRBit operator^(FPSCRBit lhs, FPSCRBit rhs) {
+  return static_cast<FPSCRBit>(static_cast<uint32_t>(lhs) ^ static_cast<uint32_t>(rhs));
+}
+constexpr FPSCRBit operator~(FPSCRBit flags) {
+  return flags ^ FPSCRBit::kAll;
+}
+constexpr bool check_flags(FPSCRBit check, FPSCRBit against) {
+  return (check & against & FPSCRBit::kAll) != FPSCRBit::kNone;
+}
+constexpr bool any_flags(FPSCRBit flags) {
+  return (flags & FPSCRBit::kAll) != FPSCRBit::kNone;
+}
 
 using DataSource =
-  std::variant<GPR, FPR, CRField, CRFlag, CRBit, MemRegOff, MemRegReg, SPR, TBR, FPSCR>;
+  std::variant<GPR, FPR, CRBit, MemRegOff, MemRegReg, SPR, TBR, FPSCRBit>;
 using ImmSource =
   std::variant<SIMM, UIMM, RelBranch, AuxImm>;

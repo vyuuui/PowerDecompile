@@ -17,7 +17,6 @@ struct BinInst {
 public:
   uint32_t _bytes;
 
-
 public:
   constexpr uint32_t ext_range(uint32_t left, uint32_t right) const {
     return (_bytes >> (31 - right)) & gen_mask(left, right);
@@ -45,24 +44,20 @@ public:
     return RelBranch{ext_range_signed(16, 29) << 2};
   }
   // Bit to use for conditional branch
-  constexpr CRBit bi() const { return CRBit{._val = ext_range(11, 15)}; }
+  constexpr CRBit bi() const { return static_cast<CRBit>(1 << ext_range(11, 15)); }
   // Branch options for conditional branch
   constexpr AuxImm bo() const { return AuxImm{ext_range(6, 10)}; }
   // CR bit numbers
-  constexpr CRBit crba() const { return CRBit{._val = ext_range(11, 15)}; }
-  constexpr CRBit crbb() const { return CRBit{._val = ext_range(16, 20)}; }
-  constexpr CRBit crbd() const { return CRBit{._val = ext_range(6, 10)}; }
+  constexpr CRBit crba() const { return static_cast<CRBit>(1 << ext_range(11, 15)); }
+  constexpr CRBit crbb() const { return static_cast<CRBit>(1 << ext_range(16, 20)); }
+  constexpr CRBit crbd() const { return static_cast<CRBit>(1 << ext_range(6, 10)); }
   // CR field numbers
-  constexpr CRField crfd() const {
-    return static_cast<CRField>(ext_range(6, 8));
+  constexpr CRBit crfd() const {
+    return static_cast<CRBit>(0b1111u << ext_range(6, 8));
   }
-  constexpr CRField crfs() const {
-    return static_cast<CRField>(ext_range(11, 13));
+  constexpr CRBit crfs() const {
+    return static_cast<CRBit>(0b1111u << ext_range(11, 13));
   }
-  // Mask for CR fields
-  constexpr AuxImm crm() const { return AuxImm{ext_range(12, 19)}; }
-  // Mask for FPSCR fields
-  constexpr AuxImm fm() const { return AuxImm{ext_range(7, 14)}; }
   // Floating point registers
   constexpr FPR fra() const { return static_cast<FPR>(ext_range(11, 15)); }
   constexpr FPR frb() const { return static_cast<FPR>(ext_range(16, 20)); }
@@ -123,7 +118,33 @@ public:
   constexpr int32_t d16() const { return ext_range_signed(16, 31); }
   constexpr int32_t d20() const { return ext_range_signed(20, 31); }
 
+  // Misc fields
   constexpr uint32_t opcd() const { return ext_range(0, 5); }
+  constexpr FPSCRBit fpscrbd() const { return static_cast<FPSCRBit>(1 << ext_range(6, 10)); }
+  constexpr FPSCRBit fpscrfd() const { return static_cast<FPSCRBit>(0b1111u << ext_range(6, 8)); }
+  constexpr FPSCRBit fpscrfs() const { return static_cast<FPSCRBit>(0b1111u << ext_range(11, 13)); }
+
+  // Mask for CR fields
+  CRBit crm() const {
+    CRBit result = CRBit::kNone;
+    for (uint32_t i = 0; i < 8; i++) {
+      if (ext_range(i + 12, i + 19)) {
+        result = result | static_cast<CRBit>(0b1111u << (4 * i));
+      }
+    }
+    return result;
+  }
+
+  // Mask for FPSCR fields
+  FPSCRBit fm() const {
+    FPSCRBit result = FPSCRBit::kNone;
+    for (uint32_t i = 0; i < 8; i++) {
+      if (ext_range(i + 7, i + 7)) {
+        result = result | static_cast<FPSCRBit>(0b1111u << (4 * i));
+      }
+    }
+    return result & FPSCRBit::kWriteMask;
+  }
 };
 
 InstOperation op_for_psfunc(uint32_t op) {
@@ -166,6 +187,58 @@ InstOperation op_for_psfunc(uint32_t op) {
   }
 }
 
+std::optional<FPSCRBit> fpscr_bits_for_psfunc(uint32_t op) {
+  switch (op) {
+    case 0:
+    case 64:
+      return FPSCRBit::kFpcc | FPSCRBit::kFx | FPSCRBit::kVxsnan;
+
+    case 10:
+    case 11:
+    case 20:
+    case 21:
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
+             FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi;
+
+    case 12: 
+    case 13:
+    case 14:
+    case 15:
+    case 28:
+    case 29:
+    case 30:
+    case 31:
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
+             FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi |
+             FPSCRBit::kVximz;
+
+    case 18:
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
+             FPSCRBit::kUx | FPSCRBit::kZx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxidi |
+             FPSCRBit::kVxzdz;
+
+    case 24:
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
+             FPSCRBit::kUx | FPSCRBit::kZx | FPSCRBit::kVxsnan;
+
+    case 25:
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
+             FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVximz;
+
+    case 26:
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kZx |
+             FPSCRBit::kVxsnan | FPSCRBit::kVxsqrt;
+
+    case 32:
+    case 96:
+      return FPSCRBit::kFpcc | FPSCRBit::kFx | FPSCRBit::kVxsnan | FPSCRBit::kVxvc;
+
+    default:
+      return std::nullopt;
+
+  }
+}
+
 void disasm_opcode_4(BinInst binst, MetaInst& meta_out) {
   uint32_t psfunc = binst.ext_range(21, 30);
   bool search_again = false;
@@ -185,7 +258,6 @@ void disasm_opcode_4(BinInst binst, MetaInst& meta_out) {
       meta_out._reads.push_back(binst.fra());
       meta_out._reads.push_back(binst.frb());
       meta_out._writes.push_back(binst.crfd());
-      meta_out._writes.push_back(FPSCR{0});
       break;
     case 528:
     case 560:
@@ -249,7 +321,6 @@ void disasm_opcode_4(BinInst binst, MetaInst& meta_out) {
       case 26:
         meta_out._reads.push_back(binst.frb());
         meta_out._writes.push_back(binst.frd());
-        meta_out._writes.push_back(FPSCR{0});
         meta_out._flags = binst.rc();
         break;
       case 25:
@@ -266,6 +337,10 @@ void disasm_opcode_4(BinInst binst, MetaInst& meta_out) {
   }
 
   meta_out._op = op_for_psfunc(psfunc);
+  std::optional<FPSCRBit> bits = fpscr_bits_for_psfunc(psfunc);
+  if (bits) {
+    meta_out._writes.push_back(*bits);
+  }
 }
 
 void disasm_opcode_19(BinInst binst, MetaInst& meta_out) {
@@ -340,9 +415,9 @@ void disasm_opcode_19(BinInst binst, MetaInst& meta_out) {
 }
 
 void disasm_opcode_31(BinInst binst, MetaInst& meta_out) {
-  const uint32_t arith_code = binst.ext_range(21, 30);
+  const uint32_t arith_func = binst.ext_range(21, 30);
   bool not_found = false;
-  switch (arith_code) {
+  switch (arith_func) {
     case 0:
       meta_out._op = InstOperation::kCmp;
       meta_out._reads.push_back(binst.ra());
@@ -453,7 +528,7 @@ void disasm_opcode_31(BinInst binst, MetaInst& meta_out) {
     case 144:
       meta_out._op = InstOperation::kMtcrf;
       meta_out._reads.push_back(binst.rs());
-      meta_out._immediates.push_back(binst.crm());
+      meta_out._writes.push_back(binst.crm());
       break;
     case 146:
       meta_out._op = InstOperation::kMtmsr;
@@ -772,7 +847,7 @@ void disasm_opcode_31(BinInst binst, MetaInst& meta_out) {
   }
 
   if (not_found) {
-    switch (arith_code & 0b111111111) {
+    switch (arith_func & 0b111111111) {
       case 8:
         meta_out._op = InstOperation::kSubfc;
         meta_out._reads.push_back(binst.ra());
@@ -873,6 +948,332 @@ void disasm_opcode_31(BinInst binst, MetaInst& meta_out) {
     meta_out._flags = binst.rc() | binst.oe();
   }
 }
+
+std::optional<FPSCRBit> fpscr_bits_for_fs_func(uint32_t func) {
+  switch (func) {
+    case 18:
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
+             FPSCRBit::kUx | FPSCRBit::kZx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxidi |
+             FPSCRBit::kVxzdz;
+    case 20:
+    case 21:
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
+             FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi;
+    case 24:
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
+             FPSCRBit::kUx | FPSCRBit::kZx | FPSCRBit::kVxsnan;
+    case 25:
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
+             FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi;
+    case 28:
+    case 29:
+    case 30:
+    case 31:
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
+             FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi |
+             FPSCRBit::kVximz;
+    default:
+      return std::nullopt;
+  }
+}
+
+void disasm_opcode_59(BinInst binst, MetaInst& meta_out) {
+  const uint32_t float_single_func = binst.ext_range(26, 30);
+  switch (float_single_func) {
+    case 18:
+      meta_out._op = InstOperation::kFdivs;
+      meta_out._reads.push_back(binst.fra());
+      meta_out._reads.push_back(binst.frb());
+      meta_out._writes.push_back(binst.frd());
+      break;
+    case 20:
+      meta_out._op = InstOperation::kFsubs;
+      meta_out._reads.push_back(binst.fra());
+      meta_out._reads.push_back(binst.frb());
+      meta_out._writes.push_back(binst.frd());
+      break;
+    case 21:
+      meta_out._op = InstOperation::kFadds;
+      meta_out._reads.push_back(binst.fra());
+      meta_out._reads.push_back(binst.frb());
+      meta_out._writes.push_back(binst.frd());
+      break;
+    case 24:
+      meta_out._op = InstOperation::kFres;
+      meta_out._reads.push_back(binst.frb());
+      meta_out._writes.push_back(binst.frd());
+      break;
+    case 25:
+      meta_out._op = InstOperation::kFmuls;
+      meta_out._reads.push_back(binst.fra());
+      meta_out._reads.push_back(binst.frc());
+      meta_out._writes.push_back(binst.frd());
+      break;
+    case 28:
+      meta_out._op = InstOperation::kFmsubs;
+      meta_out._reads.push_back(binst.fra());
+      meta_out._reads.push_back(binst.frb());
+      meta_out._reads.push_back(binst.frc());
+      meta_out._writes.push_back(binst.frd());
+      break;
+    case 29:
+      meta_out._op = InstOperation::kFmadds;
+      meta_out._reads.push_back(binst.fra());
+      meta_out._reads.push_back(binst.frb());
+      meta_out._reads.push_back(binst.frc());
+      meta_out._writes.push_back(binst.frd());
+      break;
+    case 30:
+      meta_out._op = InstOperation::kFnmsubs;
+      meta_out._reads.push_back(binst.fra());
+      meta_out._reads.push_back(binst.frb());
+      meta_out._reads.push_back(binst.frc());
+      meta_out._writes.push_back(binst.frd());
+      break;
+    case 31:
+      meta_out._op = InstOperation::kFnmadds;
+      meta_out._reads.push_back(binst.fra());
+      meta_out._reads.push_back(binst.frb());
+      meta_out._reads.push_back(binst.frc());
+      meta_out._writes.push_back(binst.frd());
+      break;
+    default:
+      meta_out._op = InstOperation::kInvalid;
+      break;
+  }
+  meta_out._flags = binst.rc();
+  std::optional<FPSCRBit> bits = fpscr_bits_for_fs_func(float_single_func);
+  if (bits) {
+    meta_out._writes.push_back(*bits);
+  }
+}
+
+std::optional<FPSCRBit> fpscr_bits_for_fd_func(uint32_t func) {
+  switch (func) {
+    case 0:
+      return FPSCRBit::kFpcc | FPSCRBit::kVxsnan;
+
+    case 12:
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
+             FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan;
+
+    case 14:
+    case 15:
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kXx |
+             FPSCRBit::kVxsnan | FPSCRBit::kVxcvi;
+
+    case 18:
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
+             FPSCRBit::kUx | FPSCRBit::kZx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxidi |
+             FPSCRBit::kVxzdz;
+
+    case 20:
+    case 21:
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
+             FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi;
+
+    case 25:
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
+             FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVximz;
+
+    case 26:
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kZx |
+             FPSCRBit::kVxsnan | FPSCRBit::kVxsqrt;
+
+    case 28:
+    case 29:
+    case 30:
+    case 31:
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
+             FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi |
+             FPSCRBit::kVximz;
+
+    case 32:
+      return FPSCRBit::kFpcc | FPSCRBit::kFx | FPSCRBit::kVxsnan | FPSCRBit::kVxvc;
+      
+    default:
+      return std::nullopt;
+  }
+}
+
+void disasm_opcode_63(BinInst binst, MetaInst& meta_out) {
+  uint32_t float_double_func = binst.ext_range(21, 30);
+  bool not_found = false;
+  switch (float_double_func) {
+    case 0:
+      meta_out._op = InstOperation::kFcmpu;
+      meta_out._reads.push_back(binst.fra());
+      meta_out._reads.push_back(binst.frb());
+      meta_out._writes.push_back(binst.crfd());
+      break;
+    case 12:
+      meta_out._op = InstOperation::kFrsp;
+      meta_out._reads.push_back(binst.frb());
+      meta_out._writes.push_back(binst.frd());
+      meta_out._flags = binst.rc();
+      break;
+    case 14:
+      meta_out._op = InstOperation::kFctiw;
+      meta_out._reads.push_back(binst.frb());
+      meta_out._writes.push_back(binst.frd());
+      meta_out._flags = binst.rc();
+      break;
+    case 15:
+      meta_out._op = InstOperation::kFctiwz;
+      meta_out._reads.push_back(binst.frb());
+      meta_out._writes.push_back(binst.frd());
+      meta_out._flags = binst.rc();
+      break;
+    case 32:
+      meta_out._op = InstOperation::kFcmpo;
+      meta_out._reads.push_back(binst.fra());
+      meta_out._reads.push_back(binst.frb());
+      meta_out._writes.push_back(binst.crfd());
+      break;
+    case 38:
+      meta_out._op = InstOperation::kMtfsb1;
+      meta_out._writes.push_back(binst.fpscrbd() | FPSCRBit::kFx);
+      meta_out._flags = binst.rc();
+      break;
+    case 40:
+      meta_out._op = InstOperation::kFneg;
+      meta_out._reads.push_back(binst.frb());
+      meta_out._writes.push_back(binst.frd());
+      meta_out._flags = binst.rc();
+      break;
+    case 64: {
+      meta_out._op = InstOperation::kMcrfs;
+      meta_out._reads.push_back(binst.fpscrfs());
+      meta_out._writes.push_back(binst.crfd());
+      meta_out._writes.push_back(binst.fpscrfs() & FPSCRBit::kExceptionMask);
+      break;
+    }
+    case 70:
+      meta_out._op = InstOperation::kMtfsb0;
+      meta_out._writes.push_back(binst.fpscrbd());
+      meta_out._flags = binst.rc();
+      break;
+    case 72:
+      meta_out._op = InstOperation::kFmr;
+      meta_out._reads.push_back(binst.frb());
+      meta_out._writes.push_back(binst.frd());
+      meta_out._flags = binst.rc();
+      break;
+    case 134:
+      meta_out._op = InstOperation::kMtfsfi;
+      meta_out._immediates.push_back(binst.imm());
+      meta_out._writes.push_back(binst.fpscrfd() & FPSCRBit::kWriteMask);
+      meta_out._flags = binst.rc();
+      break;
+    case 136:
+      meta_out._op = InstOperation::kFnabs;
+      meta_out._reads.push_back(binst.frb());
+      meta_out._writes.push_back(binst.frd());
+      meta_out._flags = binst.rc();
+      break;
+    case 264:
+      meta_out._op = InstOperation::kFabs;
+      meta_out._reads.push_back(binst.frb());
+      meta_out._writes.push_back(binst.frd());
+      meta_out._flags = binst.rc();
+      break;
+    case 583:
+      meta_out._op = InstOperation::kMffs;
+      meta_out._reads.push_back(FPSCRBit::kAll);
+      meta_out._writes.push_back(binst.frd());
+      meta_out._flags = binst.rc();
+      break;
+    case 711:
+      meta_out._op = InstOperation::kMtfsf;
+      meta_out._reads.push_back(binst.frb());
+      meta_out._writes.push_back(binst.fm());
+      meta_out._flags = binst.rc();
+      break;
+    default:
+      not_found = true;
+      break;
+  }
+
+  if (not_found) {
+    float_double_func &= 0b11111;
+    switch (float_double_func) {
+      case 18:
+        meta_out._op = InstOperation::kFdiv;
+        meta_out._reads.push_back(binst.fra());
+        meta_out._reads.push_back(binst.frb());
+        meta_out._writes.push_back(binst.frd());
+        break;
+      case 20:
+        meta_out._op = InstOperation::kFsub;
+        meta_out._reads.push_back(binst.fra());
+        meta_out._reads.push_back(binst.frb());
+        meta_out._writes.push_back(binst.frd());
+        break;
+      case 21:
+        meta_out._op = InstOperation::kFadd;
+        meta_out._reads.push_back(binst.fra());
+        meta_out._reads.push_back(binst.frb());
+        meta_out._writes.push_back(binst.frd());
+        break;
+      case 23:
+        meta_out._op = InstOperation::kFsel;
+        meta_out._reads.push_back(binst.fra());
+        meta_out._reads.push_back(binst.frb());
+        meta_out._reads.push_back(binst.frc());
+        meta_out._writes.push_back(binst.frd());
+        break;
+      case 25:
+        meta_out._op = InstOperation::kFmul;
+        meta_out._reads.push_back(binst.fra());
+        meta_out._reads.push_back(binst.frc());
+        meta_out._writes.push_back(binst.frd());
+        break;
+      case 26:
+        meta_out._op = InstOperation::kFrsqrte;
+        meta_out._reads.push_back(binst.frb());
+        meta_out._writes.push_back(binst.frd());
+        break;
+      case 28:
+        meta_out._op = InstOperation::kFmsub;
+        meta_out._reads.push_back(binst.fra());
+        meta_out._reads.push_back(binst.frb());
+        meta_out._reads.push_back(binst.frc());
+        meta_out._writes.push_back(binst.frd());
+        break;
+      case 29:
+        meta_out._op = InstOperation::kFmadd;
+        meta_out._reads.push_back(binst.fra());
+        meta_out._reads.push_back(binst.frb());
+        meta_out._reads.push_back(binst.frc());
+        meta_out._writes.push_back(binst.frd());
+        break;
+      case 30:
+        meta_out._op = InstOperation::kFnmsub;
+        meta_out._reads.push_back(binst.fra());
+        meta_out._reads.push_back(binst.frb());
+        meta_out._reads.push_back(binst.frc());
+        meta_out._writes.push_back(binst.frd());
+        break;
+      case 31:
+        meta_out._op = InstOperation::kFnmadd;
+        meta_out._reads.push_back(binst.fra());
+        meta_out._reads.push_back(binst.frb());
+        meta_out._reads.push_back(binst.frc());
+        meta_out._writes.push_back(binst.frd());
+        break;
+      default:
+        meta_out._op = InstOperation::kInvalid;
+        break;
+    }
+
+    meta_out._flags = binst.rc();
+  }
+
+  std::optional<FPSCRBit> bits = fpscr_bits_for_fd_func(float_double_func);
+  if (bits) {
+    meta_out._writes.push_back(*bits);
+  }
+}
 }
 
 void disasm_single(uint32_t raw_inst, MetaInst& meta_out) {
@@ -886,15 +1287,18 @@ void disasm_single(uint32_t raw_inst, MetaInst& meta_out) {
       meta_out._reads.push_back(binst.ra());
       meta_out._immediates.push_back(binst.simm());
       break;
+
     case 4:
       disasm_opcode_4(binst, meta_out);
       break;
+
     case 7:
       meta_out._op = InstOperation::kMulli;
       meta_out._reads.push_back(binst.ra());
       meta_out._immediates.push_back(binst.simm());
       meta_out._writes.push_back(binst.rd());
       break;
+
     case 8:
       meta_out._op = InstOperation::kSubfic;
       meta_out._reads.push_back(binst.ra());
@@ -902,6 +1306,7 @@ void disasm_single(uint32_t raw_inst, MetaInst& meta_out) {
       meta_out._writes.push_back(binst.rd());
       meta_out._writes.push_back(SPR::kXer);
       break;
+
     case 10:
       meta_out._op = InstOperation::kCmpli;
       meta_out._reads.push_back(binst.ra());
@@ -910,6 +1315,7 @@ void disasm_single(uint32_t raw_inst, MetaInst& meta_out) {
       meta_out._writes.push_back(binst.crfd());
       meta_out._flags = binst.l();
       break;
+
     case 11:
       meta_out._op = InstOperation::kCmpi;
       meta_out._reads.push_back(binst.ra());
@@ -918,6 +1324,7 @@ void disasm_single(uint32_t raw_inst, MetaInst& meta_out) {
       meta_out._writes.push_back(binst.crfd());
       meta_out._flags = binst.l();
       break;
+
     case 12:
       meta_out._op = InstOperation::kAddic;
       meta_out._reads.push_back(binst.ra());
@@ -925,6 +1332,7 @@ void disasm_single(uint32_t raw_inst, MetaInst& meta_out) {
       meta_out._writes.push_back(binst.rd());
       meta_out._writes.push_back(SPR::kXer);
       break;
+
     case 13:
       meta_out._op = InstOperation::kAddicDot;
       meta_out._reads.push_back(binst.ra());
@@ -933,18 +1341,21 @@ void disasm_single(uint32_t raw_inst, MetaInst& meta_out) {
       meta_out._writes.push_back(SPR::kXer);
       meta_out._flags = InstFlags::kWritesRecord;
       break;
+
     case 14:
       meta_out._op = InstOperation::kAddi;
       meta_out._reads.push_back(binst.ra());
       meta_out._immediates.push_back(binst.simm());
       meta_out._writes.push_back(binst.rd());
       break;
+
     case 15:
       meta_out._op = InstOperation::kAddis;
       meta_out._reads.push_back(binst.ra());
       meta_out._immediates.push_back(binst.simm());
       meta_out._writes.push_back(binst.rd());
       break;
+
     case 16:
       meta_out._op = InstOperation::kBc;
       meta_out._reads.push_back(binst.bi());
@@ -955,17 +1366,21 @@ void disasm_single(uint32_t raw_inst, MetaInst& meta_out) {
       }
       meta_out._flags = binst.aa() | binst.lk();
       break;
+
     case 17:
       meta_out._op = InstOperation::kSc;
       break;
+
     case 18:
       meta_out._op = InstOperation::kB;
       meta_out._immediates.push_back(binst.li());
       meta_out._flags = binst.aa() | binst.lk();
       break;
+
     case 19:
       disasm_opcode_19(binst, meta_out);
       break;
+
     case 20:
       meta_out._op = InstOperation::kRlwimi;
       meta_out._reads.push_back(binst.rs());
@@ -975,6 +1390,7 @@ void disasm_single(uint32_t raw_inst, MetaInst& meta_out) {
       meta_out._writes.push_back(binst.ra());
       meta_out._flags = binst.rc();
       break;
+
     case 21:
       meta_out._op = InstOperation::kRlwinm;
       meta_out._reads.push_back(binst.rs());
@@ -984,6 +1400,7 @@ void disasm_single(uint32_t raw_inst, MetaInst& meta_out) {
       meta_out._writes.push_back(binst.ra());
       meta_out._flags = binst.rc();
       break;
+
     case 23:
       meta_out._op = InstOperation::kRlwnm;
       meta_out._reads.push_back(binst.rs());
@@ -993,30 +1410,35 @@ void disasm_single(uint32_t raw_inst, MetaInst& meta_out) {
       meta_out._writes.push_back(binst.ra());
       meta_out._flags = binst.rc();
       break;
+
     case 24:
       meta_out._op = InstOperation::kOri;
       meta_out._reads.push_back(binst.rs());
       meta_out._immediates.push_back(binst.uimm());
       meta_out._writes.push_back(binst.ra());
       break;
+
     case 25:
       meta_out._op = InstOperation::kOris;
       meta_out._reads.push_back(binst.rs());
       meta_out._immediates.push_back(binst.uimm());
       meta_out._writes.push_back(binst.ra());
       break;
+
     case 26:
       meta_out._op = InstOperation::kXori;
       meta_out._reads.push_back(binst.rs());
       meta_out._immediates.push_back(binst.uimm());
       meta_out._writes.push_back(binst.ra());
       break;
+
     case 27:
       meta_out._op = InstOperation::kXoris;
       meta_out._reads.push_back(binst.rs());
       meta_out._immediates.push_back(binst.uimm());
       meta_out._writes.push_back(binst.ra());
       break;
+
     case 28:
       meta_out._op = InstOperation::kAndiDot;
       meta_out._reads.push_back(binst.rs());
@@ -1024,6 +1446,7 @@ void disasm_single(uint32_t raw_inst, MetaInst& meta_out) {
       meta_out._writes.push_back(binst.ra());
       meta_out._flags = InstFlags::kWritesRecord;
       break;
+
     case 29:
       meta_out._op = InstOperation::kAndisDot;
       meta_out._reads.push_back(binst.rs());
@@ -1031,8 +1454,210 @@ void disasm_single(uint32_t raw_inst, MetaInst& meta_out) {
       meta_out._writes.push_back(binst.ra());
       meta_out._flags = InstFlags::kWritesRecord;
       break;
+
     case 31:
       disasm_opcode_31(binst, meta_out);
+      break;
+
+    case 32:
+      meta_out._op = InstOperation::kLwz;
+      meta_out._reads.push_back(MemRegOff{binst.ra(), binst.d16()});
+      meta_out._writes.push_back(binst.rd());
+      break;
+
+    case 33:
+      meta_out._op = InstOperation::kLwzu;
+      meta_out._reads.push_back(MemRegOff{binst.ra(), binst.d16()});
+      meta_out._writes.push_back(binst.rd());
+      meta_out._writes.push_back(binst.ra());
+      break;
+
+    case 34:
+      meta_out._op = InstOperation::kLbz;
+      meta_out._reads.push_back(MemRegOff{binst.ra(), binst.d16()});
+      meta_out._writes.push_back(binst.rd());
+      break;
+
+    case 35:
+      meta_out._op = InstOperation::kLbzu;
+      meta_out._reads.push_back(MemRegOff{binst.ra(), binst.d16()});
+      meta_out._writes.push_back(binst.rd());
+      meta_out._writes.push_back(binst.ra());
+      break;
+
+    case 36:
+      meta_out._op = InstOperation::kStw;
+      meta_out._reads.push_back(binst.rs());
+      meta_out._writes.push_back(MemRegOff{binst.ra(), binst.d16()});
+      break;
+
+    case 37:
+      meta_out._op = InstOperation::kStwu;
+      meta_out._reads.push_back(binst.rs());
+      meta_out._writes.push_back(MemRegOff{binst.ra(), binst.d16()});
+      meta_out._writes.push_back(binst.ra());
+      break;
+
+    case 38:
+      meta_out._op = InstOperation::kStb;
+      meta_out._reads.push_back(binst.rs());
+      meta_out._writes.push_back(MemRegOff{binst.ra(), binst.d16()});
+      break;
+
+    case 39:
+      meta_out._op = InstOperation::kStbu;
+      meta_out._reads.push_back(binst.rs());
+      meta_out._writes.push_back(MemRegOff{binst.ra(), binst.d16()});
+      meta_out._writes.push_back(binst.ra());
+      break;
+
+    case 40:
+      meta_out._op = InstOperation::kLhz;
+      meta_out._reads.push_back(MemRegOff{binst.ra(), binst.d16()});
+      meta_out._writes.push_back(binst.rd());
+      break;
+
+    case 41:
+      meta_out._op = InstOperation::kLhzu;
+      meta_out._reads.push_back(MemRegOff{binst.ra(), binst.d16()});
+      meta_out._writes.push_back(binst.rd());
+      meta_out._writes.push_back(binst.ra());
+      break;
+
+    case 42:
+      meta_out._op = InstOperation::kLha;
+      meta_out._reads.push_back(MemRegOff{binst.ra(), binst.d16()});
+      meta_out._writes.push_back(binst.rd());
+      break;
+
+    case 43:
+      meta_out._op = InstOperation::kLhau;
+      meta_out._reads.push_back(MemRegOff{binst.ra(), binst.d16()});
+      meta_out._writes.push_back(binst.rd());
+      meta_out._writes.push_back(binst.ra());
+      break;
+
+    case 44:
+      meta_out._op = InstOperation::kSth;
+      meta_out._reads.push_back(binst.rs());
+      meta_out._writes.push_back(MemRegOff{binst.ra(), binst.d16()});
+      break;
+
+    case 45:
+      meta_out._op = InstOperation::kSthu;
+      meta_out._reads.push_back(binst.rs());
+      meta_out._writes.push_back(MemRegOff{binst.ra(), binst.d16()});
+      meta_out._writes.push_back(binst.ra());
+      break;
+
+    case 46:
+      meta_out._op = InstOperation::kLmw;
+      meta_out._reads.push_back(MemRegOff{binst.ra(), binst.d16()});
+      meta_out._writes.push_back(binst.rd());
+      break;
+
+    case 47:
+      meta_out._op = InstOperation::kStmw;
+      meta_out._reads.push_back(binst.rs());
+      meta_out._writes.push_back(MemRegOff{binst.ra(), binst.d16()});
+      break;
+
+    case 48:
+      meta_out._op = InstOperation::kLfs;
+      meta_out._reads.push_back(MemRegOff{binst.ra(), binst.d16()});
+      meta_out._writes.push_back(binst.frd());
+      break;
+
+    case 49:
+      meta_out._op = InstOperation::kLfsu;
+      meta_out._reads.push_back(MemRegOff{binst.ra(), binst.d16()});
+      meta_out._writes.push_back(binst.frd());
+      meta_out._writes.push_back(binst.ra());
+      break;
+
+    case 50:
+      meta_out._op = InstOperation::kLfd;
+      meta_out._reads.push_back(MemRegOff{binst.ra(), binst.d16()});
+      meta_out._writes.push_back(binst.frd());
+      break;
+
+    case 51:
+      meta_out._op = InstOperation::kLfdu;
+      meta_out._reads.push_back(MemRegOff{binst.ra(), binst.d16()});
+      meta_out._writes.push_back(binst.frd());
+      meta_out._writes.push_back(binst.ra());
+      break;
+
+    case 52:
+      meta_out._op = InstOperation::kStfs;
+      meta_out._reads.push_back(binst.frs());
+      meta_out._writes.push_back(MemRegOff{binst.ra(), binst.d16()});
+      break;
+
+    case 53:
+      meta_out._op = InstOperation::kStfsu;
+      meta_out._reads.push_back(binst.frs());
+      meta_out._writes.push_back(MemRegOff{binst.ra(), binst.d16()});
+      meta_out._writes.push_back(binst.ra());
+      break;
+
+    case 54:
+      meta_out._op = InstOperation::kStfd;
+      meta_out._reads.push_back(binst.frs());
+      meta_out._writes.push_back(MemRegOff{binst.ra(), binst.d16()});
+      break;
+
+    case 55:
+      meta_out._op = InstOperation::kStfdu;
+      meta_out._reads.push_back(binst.frs());
+      meta_out._writes.push_back(MemRegOff{binst.ra(), binst.d16()});
+      meta_out._writes.push_back(binst.ra());
+      break;
+
+    case 56:
+      meta_out._op = InstOperation::kPsq_l;
+      meta_out._reads.push_back(MemRegOff{binst.ra(), binst.d20()});
+      meta_out._immediates.push_back(binst.i17());
+      meta_out._writes.push_back(binst.frd());
+      meta_out._flags = binst.w();
+      break;
+
+    case 57:
+      meta_out._op = InstOperation::kPsq_lu;
+      meta_out._reads.push_back(MemRegOff{binst.ra(), binst.d20()});
+      meta_out._immediates.push_back(binst.i17());
+      meta_out._writes.push_back(binst.frd());
+      meta_out._writes.push_back(binst.ra());
+      meta_out._flags = binst.w();
+      break;
+
+    case 59:
+      disasm_opcode_59(binst, meta_out);
+      break;
+
+    case 60:
+      meta_out._op = InstOperation::kPsq_st;
+      meta_out._reads.push_back(binst.frs());
+      meta_out._immediates.push_back(binst.i17());
+      meta_out._writes.push_back(MemRegOff{binst.ra(), binst.d20()});
+      meta_out._flags = binst.w();
+      break;
+
+    case 61:
+      meta_out._op = InstOperation::kPsq_stu;
+      meta_out._reads.push_back(binst.frs());
+      meta_out._immediates.push_back(binst.i17());
+      meta_out._writes.push_back(MemRegOff{binst.ra(), binst.d20()});
+      meta_out._writes.push_back(binst.ra());
+      meta_out._flags = binst.w();
+      break;
+
+    case 63:
+      disasm_opcode_63(binst, meta_out);
+      break;
+
+    default:
+      meta_out._op = InstOperation::kInvalid;
       break;
   }
 }
