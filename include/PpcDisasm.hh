@@ -4,8 +4,9 @@
 #include <cstdint>
 #include <optional>
 
-#include "ReservedVector.hh"
 #include "DataSource.hh"
+#include "FlagsEnum.hh"
+#include "ReservedVector.hh"
 
 // Operation as determined by the opcode and possible function code
 enum class InstOperation {
@@ -49,25 +50,7 @@ enum class InstFlags : uint32_t {
   kPsLoadsOne   = 0b010000,
   kLongMode     = 0b100000,
 };
-
-constexpr InstFlags operator|(InstFlags lhs, InstFlags rhs) {
-  return static_cast<InstFlags>(static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs));
-}
-constexpr InstFlags operator&(InstFlags lhs, InstFlags rhs) {
-  return static_cast<InstFlags>(static_cast<uint32_t>(lhs) & static_cast<uint32_t>(rhs));
-}
-constexpr InstFlags operator^(InstFlags lhs, InstFlags rhs) {
-  return static_cast<InstFlags>(static_cast<uint32_t>(lhs) ^ static_cast<uint32_t>(rhs));
-}
-constexpr InstFlags operator~(InstFlags flags) {
-  return flags ^ InstFlags::kAll;
-}
-constexpr bool check_flags(InstFlags check, InstFlags against) {
-  return (check & against & InstFlags::kAll) != InstFlags::kNone;
-}
-constexpr bool any_flags(InstFlags flags) {
-  return (flags & InstFlags::kAll) != InstFlags::kNone;
-}
+GEN_FLAG_OPERATORS(InstFlags)
 
 struct MetaInst {
   uint32_t _binst;

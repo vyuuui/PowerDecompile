@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <variant>
 
+#include "FlagsEnum.hh"
+
 enum class GPR {
   kR0, kR1, kR2, kR3,
   kR4, kR5, kR6, kR7,
@@ -48,6 +50,7 @@ enum class CRBit : uint32_t {
   kVx   = 1u << 6,
   kOx   = 1u << 7,
 };
+GEN_FLAG_OPERATORS(CRBit)
 
 struct MemRegOff {
   GPR _base;
@@ -118,44 +121,7 @@ enum class FPSCRBit : uint32_t {
   kNi            = 1u << 29,
   kRn            = 0b11u << 30,
 };
-
-constexpr CRBit operator|(CRBit lhs, CRBit rhs) {
-  return static_cast<CRBit>(static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs));
-}
-constexpr CRBit operator&(CRBit lhs, CRBit rhs) {
-  return static_cast<CRBit>(static_cast<uint32_t>(lhs) & static_cast<uint32_t>(rhs));
-}
-constexpr CRBit operator^(CRBit lhs, CRBit rhs) {
-  return static_cast<CRBit>(static_cast<uint32_t>(lhs) ^ static_cast<uint32_t>(rhs));
-}
-constexpr CRBit operator~(CRBit flags) {
-  return flags ^ CRBit::kAll;
-}
-constexpr bool check_flags(CRBit check, CRBit against) {
-  return (check & against & CRBit::kAll) != CRBit::kNone;
-}
-constexpr bool any_flags(CRBit flags) {
-  return (flags & CRBit::kAll) != CRBit::kNone;
-}
-
-constexpr FPSCRBit operator|(FPSCRBit lhs, FPSCRBit rhs) {
-  return static_cast<FPSCRBit>(static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs));
-}
-constexpr FPSCRBit operator&(FPSCRBit lhs, FPSCRBit rhs) {
-  return static_cast<FPSCRBit>(static_cast<uint32_t>(lhs) & static_cast<uint32_t>(rhs));
-}
-constexpr FPSCRBit operator^(FPSCRBit lhs, FPSCRBit rhs) {
-  return static_cast<FPSCRBit>(static_cast<uint32_t>(lhs) ^ static_cast<uint32_t>(rhs));
-}
-constexpr FPSCRBit operator~(FPSCRBit flags) {
-  return flags ^ FPSCRBit::kAll;
-}
-constexpr bool check_flags(FPSCRBit check, FPSCRBit against) {
-  return (check & against & FPSCRBit::kAll) != FPSCRBit::kNone;
-}
-constexpr bool any_flags(FPSCRBit flags) {
-  return (flags & FPSCRBit::kAll) != FPSCRBit::kNone;
-}
+GEN_FLAG_OPERATORS(FPSCRBit)
 
 using DataSource =
   std::variant<GPR, FPR, CRBit, MemRegOff, MemRegReg, SPR, TBR, FPSCRBit>;
