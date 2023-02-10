@@ -230,6 +230,10 @@ public:
   }
 
   ~dinterval_tree() {
+    if (_root == nullptr) {
+      return;
+    }
+
     std::vector<interval_node*> free_stack;
     free_stack.push_back(_root);
     while (!free_stack.empty()) {

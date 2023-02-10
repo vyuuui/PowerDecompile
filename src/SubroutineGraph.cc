@@ -1,6 +1,6 @@
 #include "SubroutineGraph.hh"
 
-#include "RandomAccessData.hh"
+#include "producers/RandomAccessData.hh"
 
 namespace decomp {
 
