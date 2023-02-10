@@ -6,8 +6,11 @@
 
 namespace decomp {
 
+// Intervals have an inclusive lower bound and exclusive upper bound
 template <typename T, typename IvType = uint32_t>
 class dinterval_tree {
+  static_assert(std::is_integral_v<IvType>, "Expected integral interval type");
+
   struct interval_node {
     IvType _lo, _hi, _st_max;
     T _val;
@@ -22,7 +25,7 @@ class dinterval_tree {
     }
 
     constexpr bool overlaps(IvType l, IvType r) const {
-      return contains(l) || contains(r) || (l < _lo && r >= _hi);
+      return _hi > l && r > _lo;
     }
 
     constexpr int64_t balance_factor() const {
@@ -138,14 +141,11 @@ class dinterval_tree {
     }
   }
 
-  interval_node* _root = nullptr;
-
-public:
-  T const* query(IvType low, IvType high) const {
+  interval_node const* query_node(IvType low, IvType high) const {
     interval_node const* search = _root;
     while (search != nullptr) {
       if (search->overlaps(low, high)) {
-        return &search->_val;
+        return search;
       } else if (search->_lp == nullptr) {
         search = search->_rp;
       } else if (search->_lp->_st_max <= low) {
@@ -158,8 +158,41 @@ public:
     return nullptr;
   }
 
+  interval_node* query_node(IvType low, IvType high) {
+    return const_cast<T*>(const_cast<dinterval_tree const*>(this)->query_node(low, high));
+  }
+
+  interval_node* _root = nullptr;
+
+public:
+  T const* query(IvType low, IvType high) const {
+    interval_node const* node = query_node(low, high);
+    if (node == nullptr) {
+      return nullptr;
+    }
+    return &node->_val;
+  }
+
   T* query(IvType low, IvType high) {
     return const_cast<T*>(const_cast<dinterval_tree const*>(this)->query(low, high));
+  }
+
+  template <typename... Args>
+  bool cut_emplace_below(IvType cut_location, Args&&... args) {
+    interval_node* split_node = query_node(cut_location, cut_location);
+    if (split_node == nullptr) {
+      return false;
+    }
+
+    IvType old_hi = split_node->_hi;
+    split_node->_hi = cut_location;
+
+    // Changing the interval forces a recache up the tree
+    for (interval_node* n = split_node; n != nullptr; n = n->_parent) {
+      n->fix_cached_values();
+    }
+
+    return try_emplace(cut_location, old_hi, std::forward<Args>(args)...);
   }
 
   template <typename... Args>
@@ -194,6 +227,24 @@ public:
 
     rebalance(*insert_ptr);
     return true;
+  }
+
+  ~dinterval_tree() {
+    std::vector<interval_node*> free_stack;
+    free_stack.push_back(_root);
+    while (!free_stack.empty()) {
+      interval_node* next = free_stack.back();
+      free_stack.pop_back();
+
+      if (next->_lp != nullptr) {
+        free_stack.push_back(next->_lp);
+      }
+      if (next->_rp != nullptr) {
+        free_stack.push_back(next->_rp);
+      }
+
+      delete next;
+    }
   }
 };
 
