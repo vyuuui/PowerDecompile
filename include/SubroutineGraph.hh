@@ -7,7 +7,9 @@ namespace decomp {
 class RandomAccessData;
 
 struct BasicBlock {
+  // Inclusive start address
   uint32_t block_start;
+  // Exclusive end address
   uint32_t block_end;
 
   // TODO: Add generic extension data to tag onto blocks
