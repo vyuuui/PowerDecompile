@@ -6,7 +6,7 @@
 
 #include <fmt/format.h>
 
-#include "DisasmWrite.hh"
+#include "dbgutil/DisasmWrite.hh"
 #include "producers/DolData.hh"
 #include "SubroutineGraph.hh"
 
