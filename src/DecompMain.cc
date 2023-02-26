@@ -7,11 +7,13 @@
 #include <fmt/format.h>
 
 #include "dbgutil/DisasmWrite.hh"
+#include "dbgutil/GraphVisualizer.hh"
 #include "producers/DolData.hh"
 #include "SubroutineGraph.hh"
 
 namespace {
 using namespace decomp;
+using namespace decomp::vis;
 
 int graph_breakdown(char**);
 
@@ -75,10 +77,33 @@ int graph_breakdown(char** cmd_args) {
     visited.emplace(cur);
     std::cout << fmt::format("Block 0x{:08x} -- 0x{:08x}\n", cur->block_start, cur->block_end);
 
-    for (BasicBlock* out : cur->outgoing_edges) {
+    for (auto& pair : cur->outgoing_edges) {
+      BasicBlock* out = std::get<1>(pair);
       if (visited.count(out) == 0) {
         next.push_back(out);
       }
+    }
+  }
+
+  std::cout << "\nVisualiser:\n";
+
+  VerticalGraph vertical_graph = visualize_vertical(graph);
+  for (uint32_t row = 0; row < vertical_graph._rows.size(); row++) {
+    for (Block& cur : vertical_graph._rows[row]) {
+      std::string loop_info = "[Reg]";
+      for (auto& loop : graph.loops) {
+        if (loop.loop_start->block_start == cur._address) {
+          loop_info = "[Loop Start]";
+        } else {
+          for (auto& exit : loop.loop_exits) {
+            if (exit->block_start == cur._address) {
+              loop_info = "[Loop Exit]";
+            }
+          }
+        }
+      }
+      
+      std::cout << fmt::format("Row {} {} : Block 0x{:08x}, Inst Count {}\n", row, loop_info, cur._address, cur._inst_count);
     }
   }
 
