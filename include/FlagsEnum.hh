@@ -37,8 +37,8 @@ constexpr bool any_flags(T flags) {
 }
 }  // namespace decomp
 
-#define GEN_FLAG_OPERATORS(EnumType) \
-  constexpr EnumType operator|(EnumType lhs, EnumType rhs) { return ::decomp::bit_or(lhs, rhs); } \
+#define GEN_FLAG_OPERATORS(EnumType)                                                               \
+  constexpr EnumType operator|(EnumType lhs, EnumType rhs) { return ::decomp::bit_or(lhs, rhs); }  \
   constexpr EnumType operator&(EnumType lhs, EnumType rhs) { return ::decomp::bit_and(lhs, rhs); } \
   constexpr EnumType operator^(EnumType lhs, EnumType rhs) { return ::decomp::bit_xor(lhs, rhs); } \
   constexpr EnumType operator~(EnumType flags) { return ::decomp::bit_not(flags); }

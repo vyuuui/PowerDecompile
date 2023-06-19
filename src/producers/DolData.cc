@@ -62,12 +62,24 @@ bool DolData::load_from(std::istream& source) {
   std::array<uint32_t, kNumTextSections> text_offs, text_vas, text_sizes;
   std::array<uint32_t, kNumDataSections> data_offs, data_vas, data_sizes;
   uint32_t bss_va, bss_size;
-  for (size_t i = 0; i < kNumTextSections; i++) { source >> byteswap_prim(text_offs[i]); }
-  for (size_t i = 0; i < kNumDataSections; i++) { source >> byteswap_prim(data_offs[i]); }
-  for (size_t i = 0; i < kNumTextSections; i++) { source >> byteswap_prim(text_vas[i]); }
-  for (size_t i = 0; i < kNumDataSections; i++) { source >> byteswap_prim(data_vas[i]); }
-  for (size_t i = 0; i < kNumTextSections; i++) { source >> byteswap_prim(text_sizes[i]); }
-  for (size_t i = 0; i < kNumDataSections; i++) { source >> byteswap_prim(data_sizes[i]); }
+  for (size_t i = 0; i < kNumTextSections; i++) {
+    source >> byteswap_prim(text_offs[i]);
+  }
+  for (size_t i = 0; i < kNumDataSections; i++) {
+    source >> byteswap_prim(data_offs[i]);
+  }
+  for (size_t i = 0; i < kNumTextSections; i++) {
+    source >> byteswap_prim(text_vas[i]);
+  }
+  for (size_t i = 0; i < kNumDataSections; i++) {
+    source >> byteswap_prim(data_vas[i]);
+  }
+  for (size_t i = 0; i < kNumTextSections; i++) {
+    source >> byteswap_prim(text_sizes[i]);
+  }
+  for (size_t i = 0; i < kNumDataSections; i++) {
+    source >> byteswap_prim(data_sizes[i]);
+  }
   source >> byteswap_prim(bss_va);
   source >> byteswap_prim(bss_size);
 

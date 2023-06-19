@@ -14,19 +14,17 @@ class dinterval_tree {
   struct interval_node {
     IvType _lo, _hi, _st_max;
     T _val;
-    interval_node* _lp = nullptr, *_rp = nullptr, *_parent;
+    interval_node* _lp = nullptr;
+    interval_node* _rp = nullptr;
+    interval_node* _parent;
     int64_t _height = 1;
 
     interval_node(IvType lo, IvType hi, T&& val, interval_node* parent)
-      : _lo(lo), _hi(hi), _st_max(hi), _val(std::move(val)), _parent(parent) {}
+        : _lo(lo), _hi(hi), _st_max(hi), _val(std::move(val)), _parent(parent) {}
 
-    constexpr bool contains(IvType pt) const {
-      return pt >= _lo && pt < _hi;
-    }
+    constexpr bool contains(IvType pt) const { return pt >= _lo && pt < _hi; }
 
-    constexpr bool overlaps(IvType l, IvType r) const {
-      return _hi > l && r > _lo;
-    }
+    constexpr bool overlaps(IvType l, IvType r) const { return _hi > l && r > _lo; }
 
     constexpr int64_t balance_factor() const {
       return (_lp == nullptr ? 0 : _lp->_height) - (_rp == nullptr ? 0 : _rp->_height);
@@ -118,9 +116,8 @@ class dinterval_tree {
   void rebalance(interval_node* new_node) {
     interval_node* parent = new_node->_parent;
     while (parent != nullptr) {
-      parent->_height = 1 +
-        std::max(parent->_lp == nullptr ? 0 : parent->_lp->_height,
-                 parent->_rp == nullptr ? 0 : parent->_rp->_height);
+      parent->_height = 1 + std::max(parent->_lp == nullptr ? 0 : parent->_lp->_height,
+                                     parent->_rp == nullptr ? 0 : parent->_rp->_height);
 
       int64_t bfac = parent->balance_factor();
       if (bfac > 1) {
@@ -154,7 +151,7 @@ class dinterval_tree {
         search = search->_lp;
       }
     }
-    
+
     return nullptr;
   }
 

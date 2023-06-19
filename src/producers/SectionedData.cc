@@ -81,5 +81,4 @@ double SectionedData::read_double(uint32_t vaddr) const {
   return *opt;
 }
 
-
 }  // namespace decomp

@@ -1,15 +1,15 @@
+#include <fmt/format.h>
+
 #include <fstream>
 #include <iostream>
 #include <set>
 #include <string>
 #include <string_view>
 
-#include <fmt/format.h>
-
+#include "SubroutineGraph.hh"
 #include "dbgutil/DisasmWrite.hh"
 #include "dbgutil/GraphVisualizer.hh"
 #include "producers/DolData.hh"
-#include "SubroutineGraph.hh"
 
 namespace {
 using namespace decomp;
@@ -21,16 +21,16 @@ struct CommandVerb {
   std::string_view name;
   std::string_view expect;
   int nargs;
-  int(*verb_cb)(char**);
+  int (*verb_cb)(char**);
 
   void print_usage(char const* progname) const {
-    std::cout << fmt::format("Expected usage for {} subcommand\n  {} {} {}\n",
-                             name, progname, name, expect);
+    std::cout << fmt::format("Expected usage for {} subcommand\n  {} {} {}\n", name, progname, name,
+                             expect);
   }
 };
 
 std::array<CommandVerb, 1> sVerbs = {
-  CommandVerb { "graph", "<path to DOL> <subroutine address>", 2, graph_breakdown },
+    CommandVerb{"graph", "<path to DOL> <subroutine address>", 2, graph_breakdown},
 };
 
 void print_usage(char const* progname) {
@@ -102,8 +102,9 @@ int graph_breakdown(char** cmd_args) {
           }
         }
       }
-      
-      std::cout << fmt::format("Row {} {} : Block 0x{:08x}, Inst Count {}\n", row, loop_info, cur._address, cur._inst_count);
+
+      std::cout << fmt::format("Row {} {} : Block 0x{:08x}, Inst Count {}\n", row, loop_info,
+                               cur._address, cur._inst_count);
     }
   }
 

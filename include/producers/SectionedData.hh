@@ -25,7 +25,7 @@ struct Section {
 class SectionedData : public RandomAccessData {
 private:
   dinterval_tree<Section> _regions;
-  
+
 public:
   bool add_section(uint32_t base, std::vector<uint8_t>&& data);
   bool add_section(uint32_t base, std::vector<uint8_t> const& data);
@@ -39,6 +39,5 @@ public:
   float read_float(uint32_t vaddr) const override;
   double read_double(uint32_t vaddr) const override;
 };
-
 
 }  // namespace decomp

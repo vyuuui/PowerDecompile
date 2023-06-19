@@ -2,8 +2,8 @@
 
 #include <cassert>
 #include <cstddef>
-#include <type_traits>
 #include <memory>
+#include <type_traits>
 #include <utility>
 
 namespace decomp {

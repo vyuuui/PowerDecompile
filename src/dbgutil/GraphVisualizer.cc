@@ -1,9 +1,9 @@
 #include "dbgutil/GraphVisualizer.hh"
 
-#include <unordered_set>
 #include <queue>
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace decomp::vis {
 
@@ -14,7 +14,7 @@ VerticalGraph visualize_vertical(SubroutineGraph const& graph) {
   std::queue<size_t> pq;
   std::vector<BlockCell> cell_pool;
   std::unordered_map<BasicBlock*, size_t> cell_map;
-  //std::unordered_set<BlockCell> block_rows;
+  // std::unordered_set<BlockCell> block_rows;
 
   cell_pool.emplace_back(graph.root, 0, 0);
   pq.emplace(0);
@@ -30,7 +30,7 @@ VerticalGraph visualize_vertical(SubroutineGraph const& graph) {
     }
 
     auto future_blocks = future_set(current._basic_block);
-    
+
     bool defer = false;
     for (BasicBlock* incoming : current._basic_block->incoming_edges) {
       if (visited.count(incoming) == 0 && future_blocks.count(incoming) == 0) {
@@ -45,7 +45,7 @@ VerticalGraph visualize_vertical(SubroutineGraph const& graph) {
     }
 
     visited.emplace(current._basic_block);
-    
+
     if (ret._rows.size() <= current._row) {
       ret._rows.emplace_back();
     }
@@ -67,7 +67,7 @@ VerticalGraph visualize_vertical(SubroutineGraph const& graph) {
       }
     }
   }
-  
+
   return ret;
 }
 }  // namespace decomp::vis

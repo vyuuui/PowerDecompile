@@ -1,6 +1,7 @@
 #include "dbgutil/DisasmWrite.hh"
 
 #include <fmt/format.h>
+
 #include <iostream>
 #include <string>
 #include <variant>
@@ -9,8 +10,12 @@
 
 namespace decomp {
 namespace {
-template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
-template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+template <class... Ts>
+struct overloaded : Ts... {
+  using Ts::operator()...;
+};
+template <class... Ts>
+overloaded(Ts...) -> overloaded<Ts...>;
 
 std::string operation_name(InstOperation op) {
   switch (op) {
@@ -461,54 +466,65 @@ std::string operation_name(InstOperation op) {
     default:
       return "invalid";
   }
-
 }
 
 std::string spr_name(SPR spr) {
   switch (spr) {
-    case SPR::kLr: return "LR";
-    case SPR::kCtr: return "CTR";
-    case SPR::kXer: return "XER";
-    default: return fmt::format("SPRG#{}", static_cast<int>(spr));
+    case SPR::kLr:
+      return "LR";
+    case SPR::kCtr:
+      return "CTR";
+    case SPR::kXer:
+      return "XER";
+    default:
+      return fmt::format("SPRG#{}", static_cast<int>(spr));
   }
 }
 
 std::string tbr_name(TBR tbr) {
   switch (tbr) {
-    case TBR::kTbl: return "TBL";
-    case TBR::kTbu: return "TBU";
-    default: return fmt::format("Invalid TBR#{}", static_cast<int>(tbr));
+    case TBR::kTbl:
+      return "TBL";
+    case TBR::kTbu:
+      return "TBU";
+    default:
+      return fmt::format("Invalid TBR#{}", static_cast<int>(tbr));
   }
 }
 
 std::string datasource_to_string(DataSource const& src) {
-  return std::visit(overloaded {
-                      [](GPR gpr) -> std::string { return fmt::format("r{}", static_cast<int>(gpr)); },
-                      [](FPR fpr) -> std::string { return fmt::format("f{}", static_cast<int>(fpr)); },
-                      [](CRBit bits) -> std::string { return fmt::format("cr<{:08x}>", static_cast<uint32_t>(bits)); },
-                      [](MemRegOff mem) -> std::string {
-                        return fmt::format("[r{} + {}]", static_cast<int>(mem._base), mem._offset);
-                      },
-                      [](MemRegReg mem) -> std::string {
-                        return fmt::format("[r{} + r{}]", static_cast<int>(mem._base), static_cast<int>(mem._offset));
-                      },
-                      [](SPR spr) -> std::string { return spr_name(spr); },
-                      [](TBR tbr) -> std::string { return tbr_name(tbr); },
-                      [](FPSCRBit bits) -> std::string {
-                        return fmt::format("fpscr<{:08x}>", static_cast<uint32_t>(bits));
-                      }
-                    }, src);
+  return std::visit(
+      overloaded{[](GPR gpr) -> std::string { return fmt::format("r{}", static_cast<int>(gpr)); },
+                 [](FPR fpr) -> std::string { return fmt::format("f{}", static_cast<int>(fpr)); },
+                 [](CRBit bits) -> std::string {
+                   return fmt::format("cr<{:08x}>", static_cast<uint32_t>(bits));
+                 },
+                 [](MemRegOff mem) -> std::string {
+                   return fmt::format("[r{} + {}]", static_cast<int>(mem._base), mem._offset);
+                 },
+                 [](MemRegReg mem) -> std::string {
+                   return fmt::format("[r{} + r{}]", static_cast<int>(mem._base),
+                                      static_cast<int>(mem._offset));
+                 },
+                 [](SPR spr) -> std::string { return spr_name(spr); },
+                 [](TBR tbr) -> std::string { return tbr_name(tbr); },
+                 [](FPSCRBit bits) -> std::string {
+                   return fmt::format("fpscr<{:08x}>", static_cast<uint32_t>(bits));
+                 }},
+      src);
 }
 
 std::string immsource_to_string(ImmSource const& src) {
-  return std::visit(overloaded {
-                      [](SIMM simm) -> std::string { return fmt::format("signed {}", simm._imm_value); },
-                      [](UIMM uimm) -> std::string { return fmt::format("unsigned {}", uimm._imm_value); },
-                      [](RelBranch br) -> std::string { return fmt::format("rel32 {:x}", br._rel_32); },
-                      [](AuxImm aux) -> std::string { return fmt::format("aux {}", aux._val); },
-                    }, src);
+  return std::visit(
+      overloaded{
+          [](SIMM simm) -> std::string { return fmt::format("signed {}", simm._imm_value); },
+          [](UIMM uimm) -> std::string { return fmt::format("unsigned {}", uimm._imm_value); },
+          [](RelBranch br) -> std::string { return fmt::format("rel32 {:x}", br._rel_32); },
+          [](AuxImm aux) -> std::string { return fmt::format("aux {}", aux._val); },
+      },
+      src);
 }
-}
+}  // namespace
 
 void write_disassembly(MetaInst const& inst, std::ostream& sink) {
   if (inst._op == InstOperation::kInvalid) {

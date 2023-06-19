@@ -1,10 +1,10 @@
+#include "PpcDisasm.hh"
+
 #include <cstddef>
 #include <cstdint>
-
 #include <iostream>
 
 #include "DataSource.hh"
-#include "PpcDisasm.hh"
 #include "ReservedVector.hh"
 
 namespace decomp {
@@ -41,9 +41,7 @@ public:
 
   // Normal fields
   // Short relative branch distance
-  constexpr RelBranch bd() const {
-    return RelBranch{ext_range_signed(16, 29) << 2};
-  }
+  constexpr RelBranch bd() const { return RelBranch{ext_range_signed(16, 29) << 2}; }
   // Bit to use for conditional branch
   constexpr CRBit bi() const { return static_cast<CRBit>(1 << ext_range(11, 15)); }
   // Branch options for conditional branch
@@ -53,12 +51,8 @@ public:
   constexpr CRBit crbb() const { return static_cast<CRBit>(1 << ext_range(16, 20)); }
   constexpr CRBit crbd() const { return static_cast<CRBit>(1 << ext_range(6, 10)); }
   // CR field numbers
-  constexpr CRBit crfd() const {
-    return static_cast<CRBit>(0b1111u << ext_range(6, 8));
-  }
-  constexpr CRBit crfs() const {
-    return static_cast<CRBit>(0b1111u << ext_range(11, 13));
-  }
+  constexpr CRBit crfd() const { return static_cast<CRBit>(0b1111u << ext_range(6, 8)); }
+  constexpr CRBit crfs() const { return static_cast<CRBit>(0b1111u << ext_range(11, 13)); }
   // Floating point registers
   constexpr FPR fra() const { return static_cast<FPR>(ext_range(11, 15)); }
   constexpr FPR frb() const { return static_cast<FPR>(ext_range(16, 20)); }
@@ -71,9 +65,7 @@ public:
   // Imm to fill FPSCR
   constexpr AuxImm imm() const { return AuxImm{ext_range(16, 19)}; }
   // Long relative branch distance
-  constexpr RelBranch li() const {
-    return RelBranch{ext_range_signed(6, 29) << 2};
-  }
+  constexpr RelBranch li() const { return RelBranch{ext_range_signed(6, 29) << 2}; }
   // Bitmask begin and end index
   constexpr AuxImm mb() const { return AuxImm{ext_range(21, 25)}; }
   constexpr AuxImm me() const { return AuxImm{ext_range(26, 30)}; }
@@ -150,41 +142,76 @@ public:
 
 InstOperation op_for_psfunc(uint32_t op) {
   switch (op) {
-    case 0: return InstOperation::kPs_cmpu0;
-    case 6: return InstOperation::kPsq_lx;
-    case 7: return InstOperation::kPsq_stx;
-    case 10: return InstOperation::kPs_sum0;
-    case 11: return InstOperation::kPs_sum1;
-    case 12: return InstOperation::kPs_muls0;
-    case 13: return InstOperation::kPs_muls1;
-    case 14: return InstOperation::kPs_madds0;
-    case 15: return InstOperation::kPs_madds1;
-    case 18: return InstOperation::kPs_div;
-    case 20: return InstOperation::kPs_sub;
-    case 21: return InstOperation::kPs_add;
-    case 23: return InstOperation::kPs_sel;
-    case 24: return InstOperation::kPs_res;
-    case 25: return InstOperation::kPs_mul;
-    case 26: return InstOperation::kPs_rsqrte;
-    case 28: return InstOperation::kPs_msub;
-    case 29: return InstOperation::kPs_madd;
-    case 30: return InstOperation::kPs_nmsub;
-    case 31: return InstOperation::kPs_nmadd;
-    case 32: return InstOperation::kPs_cmpo0;
-    case 38: return InstOperation::kPsq_lux;
-    case 39: return InstOperation::kPsq_stux;
-    case 40: return InstOperation::kPs_neg;
-    case 64: return InstOperation::kPs_cmpu1;
-    case 72: return InstOperation::kPs_mr;
-    case 96: return InstOperation::kPs_cmpo1;
-    case 136: return InstOperation::kPs_nabs;
-    case 264: return InstOperation::kPs_abs;
-    case 528: return InstOperation::kPs_merge00;
-    case 560: return InstOperation::kPs_merge01;
-    case 592: return InstOperation::kPs_merge10;
-    case 624: return InstOperation::kPs_merge11;
-    case 1014: return InstOperation::kDcbz_l;
-    default: return InstOperation::kInvalid;
+    case 0:
+      return InstOperation::kPs_cmpu0;
+    case 6:
+      return InstOperation::kPsq_lx;
+    case 7:
+      return InstOperation::kPsq_stx;
+    case 10:
+      return InstOperation::kPs_sum0;
+    case 11:
+      return InstOperation::kPs_sum1;
+    case 12:
+      return InstOperation::kPs_muls0;
+    case 13:
+      return InstOperation::kPs_muls1;
+    case 14:
+      return InstOperation::kPs_madds0;
+    case 15:
+      return InstOperation::kPs_madds1;
+    case 18:
+      return InstOperation::kPs_div;
+    case 20:
+      return InstOperation::kPs_sub;
+    case 21:
+      return InstOperation::kPs_add;
+    case 23:
+      return InstOperation::kPs_sel;
+    case 24:
+      return InstOperation::kPs_res;
+    case 25:
+      return InstOperation::kPs_mul;
+    case 26:
+      return InstOperation::kPs_rsqrte;
+    case 28:
+      return InstOperation::kPs_msub;
+    case 29:
+      return InstOperation::kPs_madd;
+    case 30:
+      return InstOperation::kPs_nmsub;
+    case 31:
+      return InstOperation::kPs_nmadd;
+    case 32:
+      return InstOperation::kPs_cmpo0;
+    case 38:
+      return InstOperation::kPsq_lux;
+    case 39:
+      return InstOperation::kPsq_stux;
+    case 40:
+      return InstOperation::kPs_neg;
+    case 64:
+      return InstOperation::kPs_cmpu1;
+    case 72:
+      return InstOperation::kPs_mr;
+    case 96:
+      return InstOperation::kPs_cmpo1;
+    case 136:
+      return InstOperation::kPs_nabs;
+    case 264:
+      return InstOperation::kPs_abs;
+    case 528:
+      return InstOperation::kPs_merge00;
+    case 560:
+      return InstOperation::kPs_merge01;
+    case 592:
+      return InstOperation::kPs_merge10;
+    case 624:
+      return InstOperation::kPs_merge11;
+    case 1014:
+      return InstOperation::kDcbz_l;
+    default:
+      return InstOperation::kInvalid;
   }
 }
 
@@ -201,7 +228,7 @@ std::optional<FPSCRBit> fpscr_bits_for_psfunc(uint32_t op) {
       return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
              FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi;
 
-    case 12: 
+    case 12:
     case 13:
     case 14:
     case 15:
@@ -236,7 +263,6 @@ std::optional<FPSCRBit> fpscr_bits_for_psfunc(uint32_t op) {
 
     default:
       return std::nullopt;
-
   }
 }
 
@@ -1091,7 +1117,7 @@ std::optional<FPSCRBit> fpscr_bits_for_fd_func(uint32_t func) {
 
     case 32:
       return FPSCRBit::kFpcc | FPSCRBit::kFx | FPSCRBit::kVxsnan | FPSCRBit::kVxvc;
-      
+
     default:
       return std::nullopt;
   }
@@ -1275,7 +1301,7 @@ void disasm_opcode_63(BinInst binst, MetaInst& meta_out) {
     meta_out._writes.push_back(*bits);
   }
 }
-}
+}  // namespace
 
 void disasm_single(uint32_t raw_inst, MetaInst& meta_out) {
   const BinInst binst{raw_inst};

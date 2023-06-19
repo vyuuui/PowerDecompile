@@ -1,9 +1,9 @@
 #pragma once
 
 #include <cstdint>
-#include <vector>
 #include <tuple>
 #include <unordered_set>
+#include <vector>
 
 namespace decomp {
 class RandomAccessData;
@@ -29,7 +29,7 @@ struct BasicBlock {
 struct Loop {
   BasicBlock* loop_start;
   std::vector<BasicBlock*> loop_exits;
-  
+
   Loop(BasicBlock* start) : loop_start(start), loop_exits() {}
 };
 
