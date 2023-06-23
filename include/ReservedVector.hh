@@ -79,12 +79,8 @@ public:
       --const_iterator::_it;
       return ret;
     }
-    iterator operator+(ptrdiff_t i) const {
-      return iterator(const_cast<T*>(const_iterator::_it) + i);
-    }
-    iterator operator-(ptrdiff_t i) const {
-      return iterator(const_cast<T*>(const_iterator::_it) - i);
-    }
+    iterator operator+(ptrdiff_t i) const { return iterator(const_cast<T*>(const_iterator::_it) + i); }
+    iterator operator-(ptrdiff_t i) const { return iterator(const_cast<T*>(const_iterator::_it) - i); }
     iterator& operator+=(ptrdiff_t i) {
       const_iterator::_it += i;
       return *this;
@@ -93,27 +89,15 @@ public:
       const_iterator::_it -= i;
       return *this;
     }
-    ptrdiff_t operator-(iterator const& rhs) const {
-      return const_iterator::_it - rhs.const_iterator::_it;
-    }
-    bool operator>(iterator const& rhs) const {
-      return const_iterator::_it > rhs.const_iterator::_it;
-    }
-    bool operator<(iterator const& rhs) const {
-      return const_iterator::_it < rhs.const_iterator::_it;
-    }
-    bool operator>=(iterator const& rhs) const {
-      return const_iterator::_it >= rhs.const_iterator::_it;
-    }
-    bool operator<=(iterator const& rhs) const {
-      return const_iterator::_it <= rhs.const_iterator::_it;
-    }
+    ptrdiff_t operator-(iterator const& rhs) const { return const_iterator::_it - rhs.const_iterator::_it; }
+    bool operator>(iterator const& rhs) const { return const_iterator::_it > rhs.const_iterator::_it; }
+    bool operator<(iterator const& rhs) const { return const_iterator::_it < rhs.const_iterator::_it; }
+    bool operator>=(iterator const& rhs) const { return const_iterator::_it >= rhs.const_iterator::_it; }
+    bool operator<=(iterator const& rhs) const { return const_iterator::_it <= rhs.const_iterator::_it; }
     T& operator[](ptrdiff_t i) const { return const_cast<T*>(const_iterator::_it)[i]; }
   };
 
-  constexpr iterator const_cast_iterator(const_iterator it) {
-    return iterator(const_cast<T*>(it._it));
-  }
+  constexpr iterator const_cast_iterator(const_iterator it) { return iterator(const_cast<T*>(it._it)); }
 };
 
 template <typename T, size_t N>

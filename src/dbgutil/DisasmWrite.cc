@@ -495,38 +495,32 @@ std::string tbr_name(TBR tbr) {
 std::string datasource_to_string(DataSource const& src) {
   return std::visit(
       overloaded{[](GPR gpr) -> std::string { return fmt::format("r{}", static_cast<int>(gpr)); },
-                 [](FPR fpr) -> std::string { return fmt::format("f{}", static_cast<int>(fpr)); },
-                 [](CRBit bits) -> std::string {
-                   return fmt::format("cr<{:08x}>", static_cast<uint32_t>(bits));
-                 },
-                 [](MemRegOff mem) -> std::string {
-                   return fmt::format("[r{} + {}]", static_cast<int>(mem._base), mem._offset);
-                 },
-                 [](MemRegReg mem) -> std::string {
-                   return fmt::format("[r{} + r{}]", static_cast<int>(mem._base),
-                                      static_cast<int>(mem._offset));
-                 },
-                 [](SPR spr) -> std::string { return spr_name(spr); },
-                 [](TBR tbr) -> std::string { return tbr_name(tbr); },
-                 [](FPSCRBit bits) -> std::string {
-                   return fmt::format("fpscr<{:08x}>", static_cast<uint32_t>(bits));
-                 }},
+          [](FPR fpr) -> std::string { return fmt::format("f{}", static_cast<int>(fpr)); },
+          [](CRBit bits) -> std::string { return fmt::format("cr<{:08x}>", static_cast<uint32_t>(bits)); },
+          [](MemRegOff mem) -> std::string {
+            return fmt::format("[r{} + {}]", static_cast<int>(mem._base), mem._offset);
+          },
+          [](MemRegReg mem) -> std::string {
+            return fmt::format("[r{} + r{}]", static_cast<int>(mem._base), static_cast<int>(mem._offset));
+          },
+          [](SPR spr) -> std::string { return spr_name(spr); },
+          [](TBR tbr) -> std::string { return tbr_name(tbr); },
+          [](FPSCRBit bits) -> std::string { return fmt::format("fpscr<{:08x}>", static_cast<uint32_t>(bits)); }},
       src);
 }
 
 std::string immsource_to_string(ImmSource const& src) {
-  return std::visit(
-      overloaded{
-          [](SIMM simm) -> std::string { return fmt::format("signed {}", simm._imm_value); },
-          [](UIMM uimm) -> std::string { return fmt::format("unsigned {}", uimm._imm_value); },
-          [](RelBranch br) -> std::string { return fmt::format("rel32 {:x}", br._rel_32); },
-          [](AuxImm aux) -> std::string { return fmt::format("aux {}", aux._val); },
-      },
+  return std::visit(overloaded{
+                        [](SIMM simm) -> std::string { return fmt::format("signed {}", simm._imm_value); },
+                        [](UIMM uimm) -> std::string { return fmt::format("unsigned {}", uimm._imm_value); },
+                        [](RelBranch br) -> std::string { return fmt::format("rel32 {:x}", br._rel_32); },
+                        [](AuxImm aux) -> std::string { return fmt::format("aux {}", aux._val); },
+                    },
       src);
 }
 }  // namespace
 
-void write_disassembly(MetaInst const& inst, std::ostream& sink) {
+void write_inst_info(MetaInst const& inst, std::ostream& sink) {
   if (inst._op == InstOperation::kInvalid) {
     sink << "Invalid decode" << std::endl;
     return;

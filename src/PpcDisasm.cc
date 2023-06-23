@@ -10,8 +10,7 @@
 namespace decomp {
 namespace {
 constexpr uint32_t gen_mask(uint32_t left, uint32_t right) {
-  return static_cast<uint32_t>(((uint64_t{1} << (32 - left)) - 1) &
-                               ~((uint64_t{1} << (31 - right)) - 1));
+  return static_cast<uint32_t>(((uint64_t{1} << (32 - left)) - 1) & ~((uint64_t{1} << (31 - right)) - 1));
 }
 
 struct BinInst {
@@ -31,12 +30,10 @@ public:
 
   // Bitswapped fields
   constexpr SPR spr() const {
-    return static_cast<SPR>(((ext_range(11, 20) >> 5) & 0b0000011111) |
-                            ((ext_range(11, 20) << 5) & 0b1111100000));
+    return static_cast<SPR>(((ext_range(11, 20) >> 5) & 0b0000011111) | ((ext_range(11, 20) << 5) & 0b1111100000));
   }
   constexpr TBR tbr() const {
-    return static_cast<TBR>(((ext_range(11, 20) >> 5) & 0b0000011111) |
-                            ((ext_range(11, 20) << 5) & 0b1111100000));
+    return static_cast<TBR>(((ext_range(11, 20) >> 5) & 0b0000011111) | ((ext_range(11, 20) << 5) & 0b1111100000));
   }
 
   // Normal fields
@@ -88,24 +85,12 @@ public:
   constexpr UIMM uimm() const { return UIMM{ext_range(16, 31)}; }
 
   // Flag fields
-  constexpr InstFlags oe() const {
-    return ext_range(30, 30) ? InstFlags::kWritesXER : InstFlags::kNone;
-  }
-  constexpr InstFlags rc() const {
-    return ext_range(31, 31) ? InstFlags::kWritesRecord : InstFlags::kNone;
-  }
-  constexpr InstFlags aa() const {
-    return ext_range(30, 30) ? InstFlags::kAbsoluteAddr : InstFlags::kNone;
-  }
-  constexpr InstFlags lk() const {
-    return ext_range(31, 31) ? InstFlags::kWritesLR : InstFlags::kNone;
-  }
-  constexpr InstFlags w() const {
-    return ext_range(21, 21) ? InstFlags::kPsLoadsOne : InstFlags::kNone;
-  }
-  constexpr InstFlags l() const {
-    return ext_range(10, 10) ? InstFlags::kLongMode : InstFlags::kNone;
-  }
+  constexpr InstFlags oe() const { return ext_range(30, 30) ? InstFlags::kWritesXER : InstFlags::kNone; }
+  constexpr InstFlags rc() const { return ext_range(31, 31) ? InstFlags::kWritesRecord : InstFlags::kNone; }
+  constexpr InstFlags aa() const { return ext_range(30, 30) ? InstFlags::kAbsoluteAddr : InstFlags::kNone; }
+  constexpr InstFlags lk() const { return ext_range(31, 31) ? InstFlags::kWritesLR : InstFlags::kNone; }
+  constexpr InstFlags w() const { return ext_range(21, 21) ? InstFlags::kPsLoadsOne : InstFlags::kNone; }
+  constexpr InstFlags l() const { return ext_range(10, 10) ? InstFlags::kLongMode : InstFlags::kNone; }
 
   // Partially completed fields
   constexpr int32_t d16() const { return ext_range_signed(16, 31); }
@@ -225,8 +210,8 @@ std::optional<FPSCRBit> fpscr_bits_for_psfunc(uint32_t op) {
     case 11:
     case 20:
     case 21:
-      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
-             FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi;
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx | FPSCRBit::kUx |
+             FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi;
 
     case 12:
     case 13:
@@ -236,26 +221,24 @@ std::optional<FPSCRBit> fpscr_bits_for_psfunc(uint32_t op) {
     case 29:
     case 30:
     case 31:
-      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
-             FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi |
-             FPSCRBit::kVximz;
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx | FPSCRBit::kUx |
+             FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi | FPSCRBit::kVximz;
 
     case 18:
-      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
-             FPSCRBit::kUx | FPSCRBit::kZx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxidi |
-             FPSCRBit::kVxzdz;
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx | FPSCRBit::kUx |
+             FPSCRBit::kZx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxidi | FPSCRBit::kVxzdz;
 
     case 24:
-      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
-             FPSCRBit::kUx | FPSCRBit::kZx | FPSCRBit::kVxsnan;
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx | FPSCRBit::kUx |
+             FPSCRBit::kZx | FPSCRBit::kVxsnan;
 
     case 25:
-      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
-             FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVximz;
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx | FPSCRBit::kUx |
+             FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVximz;
 
     case 26:
-      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kZx |
-             FPSCRBit::kVxsnan | FPSCRBit::kVxsqrt;
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kZx | FPSCRBit::kVxsnan |
+             FPSCRBit::kVxsqrt;
 
     case 32:
     case 96:
@@ -979,26 +962,24 @@ void disasm_opcode_31(BinInst binst, MetaInst& meta_out) {
 std::optional<FPSCRBit> fpscr_bits_for_fs_func(uint32_t func) {
   switch (func) {
     case 18:
-      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
-             FPSCRBit::kUx | FPSCRBit::kZx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxidi |
-             FPSCRBit::kVxzdz;
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx | FPSCRBit::kUx |
+             FPSCRBit::kZx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxidi | FPSCRBit::kVxzdz;
     case 20:
     case 21:
-      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
-             FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi;
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx | FPSCRBit::kUx |
+             FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi;
     case 24:
-      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
-             FPSCRBit::kUx | FPSCRBit::kZx | FPSCRBit::kVxsnan;
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx | FPSCRBit::kUx |
+             FPSCRBit::kZx | FPSCRBit::kVxsnan;
     case 25:
-      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
-             FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi;
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx | FPSCRBit::kUx |
+             FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi;
     case 28:
     case 29:
     case 30:
     case 31:
-      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
-             FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi |
-             FPSCRBit::kVximz;
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx | FPSCRBit::kUx |
+             FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi | FPSCRBit::kVximz;
     default:
       return std::nullopt;
   }
@@ -1081,39 +1062,37 @@ std::optional<FPSCRBit> fpscr_bits_for_fd_func(uint32_t func) {
       return FPSCRBit::kFpcc | FPSCRBit::kVxsnan;
 
     case 12:
-      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
-             FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan;
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx | FPSCRBit::kUx |
+             FPSCRBit::kXx | FPSCRBit::kVxsnan;
 
     case 14:
     case 15:
-      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kXx |
-             FPSCRBit::kVxsnan | FPSCRBit::kVxcvi;
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kXx | FPSCRBit::kVxsnan |
+             FPSCRBit::kVxcvi;
 
     case 18:
-      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
-             FPSCRBit::kUx | FPSCRBit::kZx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxidi |
-             FPSCRBit::kVxzdz;
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx | FPSCRBit::kUx |
+             FPSCRBit::kZx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxidi | FPSCRBit::kVxzdz;
 
     case 20:
     case 21:
-      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
-             FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi;
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx | FPSCRBit::kUx |
+             FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi;
 
     case 25:
-      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
-             FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVximz;
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx | FPSCRBit::kUx |
+             FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVximz;
 
     case 26:
-      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kZx |
-             FPSCRBit::kVxsnan | FPSCRBit::kVxsqrt;
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kZx | FPSCRBit::kVxsnan |
+             FPSCRBit::kVxsqrt;
 
     case 28:
     case 29:
     case 30:
     case 31:
-      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx |
-             FPSCRBit::kUx | FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi |
-             FPSCRBit::kVximz;
+      return FPSCRBit::kFprf | FPSCRBit::kFr | FPSCRBit::kFi | FPSCRBit::kFx | FPSCRBit::kOx | FPSCRBit::kUx |
+             FPSCRBit::kXx | FPSCRBit::kVxsnan | FPSCRBit::kVxisi | FPSCRBit::kVximz;
 
     case 32:
       return FPSCRBit::kFpcc | FPSCRBit::kFx | FPSCRBit::kVxsnan | FPSCRBit::kVxvc;
@@ -1695,5 +1674,46 @@ void disasm_single(uint32_t raw_inst, MetaInst& meta_out) {
       meta_out._op = InstOperation::kInvalid;
       break;
   }
+}
+
+bool is_blr(MetaInst const& inst) {
+  return inst._op == InstOperation::kBclr && inst._writes.empty() &&
+         bo_type_from_imm(std::get<AuxImm>(inst._immediates[0])) == BOType::kAlways;
+}
+
+BOType bo_type_from_imm(AuxImm imm) {
+  // Most common encodings: T, F, Always
+  // e.g. beq, bne, bgt, blr
+  if ((imm._val & 0b11100) == 0b01100) {
+    return BOType::kT;
+  }
+  if ((imm._val & 0b11100) == 0b00100) {
+    return BOType::kF;
+  }
+  if ((imm._val & 0b10100) == 0b10100) {
+    return BOType::kAlways;
+  }
+
+  // Infrequently used: dnz, dz
+  if ((imm._val & 0b10110) == 0b10000) {
+    return BOType::kDnz;
+  }
+  if ((imm._val & 0b10110) == 0b10010) {
+    return BOType::kDz;
+  }
+
+  if ((imm._val & 0b11110) == 0b00000) {
+    return BOType::kDnzf;
+  }
+  if ((imm._val & 0b11110) == 0b00010) {
+    return BOType::kDzf;
+  }
+  if ((imm._val & 0b11110) == 0b01000) {
+    return BOType::kDnzt;
+  }
+  if ((imm._val & 0b11110) == 0b01010) {
+    return BOType::kDzt;
+  }
+  return BOType::kInvalid;
 }
 }  // namespace decomp

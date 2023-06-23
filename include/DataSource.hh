@@ -41,6 +41,11 @@ enum class GPR {
   kR31,
 };
 
+constexpr bool operator>(GPR l, GPR r) { return static_cast<int>(l) > static_cast<int>(r); }
+constexpr bool operator>=(GPR l, GPR r) { return static_cast<int>(l) >= static_cast<int>(r); }
+constexpr bool operator<(GPR l, GPR r) { return static_cast<int>(l) < static_cast<int>(r); }
+constexpr bool operator<=(GPR l, GPR r) { return static_cast<int>(l) <= static_cast<int>(r); }
+
 enum class FPR {
   kF0,
   kF1,
@@ -75,6 +80,11 @@ enum class FPR {
   kF30,
   kF31,
 };
+
+constexpr bool operator>(FPR l, FPR r) { return static_cast<int>(l) > static_cast<int>(r); }
+constexpr bool operator>=(FPR l, FPR r) { return static_cast<int>(l) >= static_cast<int>(r); }
+constexpr bool operator<(FPR l, FPR r) { return static_cast<int>(l) < static_cast<int>(r); }
+constexpr bool operator<=(FPR l, FPR r) { return static_cast<int>(l) <= static_cast<int>(r); }
 
 enum class CRBit : uint32_t {
   kNone = 0,

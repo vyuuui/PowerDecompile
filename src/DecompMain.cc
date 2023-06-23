@@ -1,64 +1,77 @@
 #include <fmt/format.h>
 
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <set>
 #include <string>
 #include <string_view>
 
+#include "CodeWarriorABIConfiguration.hh"
 #include "SubroutineGraph.hh"
 #include "dbgutil/DisasmWrite.hh"
-#include "dbgutil/GraphVisualizer.hh"
 #include "producers/DolData.hh"
+
+// TODO: consider moving me
+namespace decomp {
+CWABIConfiguration gAbiConfig;
+}  // namespace decomp
 
 namespace {
 using namespace decomp;
-using namespace decomp::vis;
 
-int graph_breakdown(char**);
+int summarize_subroutine(char**);
+int dump_dotfile(char**);
+int print_sections(char**);
 
 struct CommandVerb {
   std::string_view name;
   std::string_view expect;
+  std::string_view short_desc;
   int nargs;
   int (*verb_cb)(char**);
 
   void print_usage(char const* progname) const {
-    std::cout << fmt::format("Expected usage for {} subcommand\n  {} {} {}\n", name, progname, name,
-                             expect);
+    std::cerr << fmt::format("Expected usage for {} command\n  {} {} {}\n", name, progname, name, expect);
   }
 };
 
-std::array<CommandVerb, 1> sVerbs = {
-    CommandVerb{"graph", "<path to DOL> <subroutine address>", 2, graph_breakdown},
+std::array<CommandVerb, 3> sVerbs = {
+    CommandVerb{"summarize",
+        "<dol-path> <subroutine-address>",
+        "Print out a summary of the subroutine starting at a specified address",
+        2,
+        summarize_subroutine},
+    CommandVerb{"graphviz",
+        "<DOT-path> <dol-path> <subroutine-address>",
+        "Create a DOT file for visualization with graphviz",
+        3,
+        dump_dotfile},
+    CommandVerb{"sections", "<dol-path>", "Print out a list of all sections from the specified DOL", 1, print_sections},
 };
 
 void print_usage(char const* progname) {
-  std::cout << fmt::format("Expected usage\n  {} <subcommand> ...\nSupported subcommands: ",
-                           progname);
+  std::cerr << fmt::format("Expected usage\n  {} <command> ...\nSupported commands:\n", progname);
 
-  std::cout << sVerbs[0].name;
-  for (size_t i = 1; i < sVerbs.size(); i++) {
-    std::cout << fmt::format(", {}", sVerbs[i].name);
+  for (size_t i = 0; i < sVerbs.size(); i++) {
+    std::cerr << fmt::format("  {}\t{}\n", sVerbs[i].name, sVerbs[i].short_desc);
   }
-
-  std::cout << "\n";
 }
 
 // Verb implementations
 
-int graph_breakdown(char** cmd_args) {
+int summarize_subroutine(char** cmd_args) {
   uint32_t analysis_start = strtoll(cmd_args[1], nullptr, 16);
 
   DolData dol_data;
   {
     std::ifstream file_in(cmd_args[0], std::ios::binary);
     if (!file_in.is_open()) {
-      std::cout << fmt::format("Failed to open path {}\n", cmd_args[0]);
+      std::cerr << fmt::format("Failed to open path {}\n", cmd_args[0]);
       return 1;
     }
     if (!dol_data.load_from(file_in)) {
-      std::cout << fmt::format("Provided file {} is not a DOL\n", cmd_args[0]);
+      std::cerr << fmt::format("Provided file {} is not a DOL\n", cmd_args[0]);
       return 1;
     }
   }
@@ -85,29 +98,114 @@ int graph_breakdown(char** cmd_args) {
     }
   }
 
-  std::cout << "\nVisualiser:\n";
+  for (Loop const& loop : graph.loops) {
+    std::cout << fmt::format("Loop beginning at 0x{:08x} spanning blocks:\n", loop.loop_start->block_start);
 
-  VerticalGraph vertical_graph = visualize_vertical(graph);
-  for (uint32_t row = 0; row < vertical_graph._rows.size(); row++) {
-    for (Block& cur : vertical_graph._rows[row]) {
-      std::string loop_info = "[Reg]";
-      for (auto& loop : graph.loops) {
-        if (loop.loop_start->block_start == cur._address) {
-          loop_info = "[Loop Start]";
-        } else {
-          for (auto& exit : loop.loop_exits) {
-            if (exit->block_start == cur._address) {
-              loop_info = "[Loop Exit]";
-            }
-          }
-        }
-      }
+    for (BasicBlock* block : loop.loop_contents) {
+      std::cout << fmt::format("\tBlock 0x{:08x} -- 0x{:08x}\n", block->block_start, block->block_end);
+    }
+  }
+  return 0;
+}
 
-      std::cout << fmt::format("Row {} {} : Block 0x{:08x}, Inst Count {}\n", row, loop_info,
-                               cur._address, cur._inst_count);
+int dump_dotfile(char** cmd_args) {
+  uint32_t analysis_start = strtoll(cmd_args[2], nullptr, 16);
+
+  DolData dol_data;
+  {
+    std::ifstream file_in(cmd_args[1], std::ios::binary);
+    if (!file_in.is_open()) {
+      std::cerr << fmt::format("Failed to open path {}\n", cmd_args[1]);
+      return 1;
+    }
+    if (!dol_data.load_from(file_in)) {
+      std::cerr << fmt::format("Provided file {} is not a DOL\n", cmd_args[1]);
+      return 1;
     }
   }
 
+  SubroutineGraph graph = create_graph(dol_data, analysis_start);
+
+  std::ofstream dotfile_out(cmd_args[0], std::ios::trunc);
+  if (!dotfile_out.is_open()) {
+    std::cerr << fmt::format("Failed to open/create path {} for writing\n", cmd_args[0]);
+  }
+
+  dotfile_out << fmt::format("digraph sub_{:08x} {{\n  graph [splines=ortho]\n  {{\n", analysis_start);
+  for (BasicBlock* block : graph.nodes_by_id) {
+    dotfile_out << fmt::format("    n{} [shape=\"box\" label=\"loc_{:08x}\"]\n", block->block_id, block->block_end);
+  }
+  dotfile_out << "  }\n";
+
+  constexpr auto color_for_type = [](OutgoingEdgeType type) -> char const* {
+    switch (type) {
+      case OutgoingEdgeType::kUnconditional:
+      case OutgoingEdgeType::kFallthrough:
+        return "blue";
+      case OutgoingEdgeType::kConditionTrue:
+        return "green";
+      case OutgoingEdgeType::kConditionFalse:
+        return "red";
+      default:
+        return "black";
+    }
+  };
+
+  for (BasicBlock* block : graph.nodes_by_id) {
+    if (block->outgoing_edges.empty()) {
+      continue;
+    }
+
+    for (auto&& [edge_type, next] : block->outgoing_edges) {
+      dotfile_out << fmt::format(
+          "  n{} -> n{} [color=\"{}\"]\n", block->block_id, next->block_id, color_for_type(edge_type));
+    }
+  }
+
+  dotfile_out << "}\n";
+  dotfile_out.close();
+
+  return 0;
+}
+
+int print_sections(char** cmd_args) {
+  DolData dol_data;
+  {
+    std::ifstream file_in(cmd_args[0], std::ios::binary);
+    if (!file_in.is_open()) {
+      std::cerr << fmt::format("Failed to open path {}\n", cmd_args[0]);
+      return 1;
+    }
+    if (!dol_data.load_from(file_in)) {
+      std::cerr << fmt::format("Provided file {} is not a DOL\n", cmd_args[0]);
+      return 1;
+    }
+  }
+
+  std::cout << "SECTION NAME   VA BEGIN       VA END         FILE BEGIN     FILE END       SIZE\n";
+  int section_number = 0;
+  for (DolSection const& ts : dol_data.text_section_headers()) {
+    std::cout << std::setw(15) << std::left << fmt::format(".text{}", section_number);
+    std::cout << fmt::format("{:08x}       {:08x}       {:08x}       {:08x}       {:08x}\n",
+        ts._vaddr,
+        ts._vaddr + ts._size,
+        ts._file_off,
+        ts._file_off + ts._size,
+        ts._size);
+    section_number++;
+  }
+
+  section_number = 0;
+  for (DolSection const& ds : dol_data.data_section_headers()) {
+    std::cout << std::setw(15) << std::left << fmt::format(".data{}", section_number);
+    std::cout << fmt::format("{:08x}       {:08x}       {:08x}       {:08x}       {:08x}\n",
+        ds._vaddr,
+        ds._vaddr + ds._size,
+        ds._file_off,
+        ds._file_off + ds._size,
+        ds._size);
+    section_number++;
+  }
   return 0;
 }
 }  // namespace
@@ -134,7 +232,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  std::cout << fmt::format("Unknown subcommand \"{}\"\n", argv[1]);
+  std::cerr << fmt::format("Unknown subcommand \"{}\"\n", argv[1]);
   print_usage(argv[0]);
   return 1;
 }

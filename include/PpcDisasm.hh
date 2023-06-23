@@ -248,6 +248,9 @@ enum class InstFlags : uint32_t {
 };
 GEN_FLAG_OPERATORS(InstFlags)
 
+// BO (branch operation?) type, mapped from instruction encoding to mnemonic
+enum class BOType { kDnzf, kDzf, kF, kDnzt, kDzt, kT, kDnz, kDz, kAlways, kInvalid };
+
 struct MetaInst {
   uint32_t _binst;
   // All data sources being read
@@ -262,4 +265,7 @@ struct MetaInst {
 };
 
 void disasm_single(uint32_t raw_inst, MetaInst& meta_out);
+bool is_blr(MetaInst const& inst);
+
+BOType bo_type_from_imm(AuxImm imm);
 }  // namespace decomp

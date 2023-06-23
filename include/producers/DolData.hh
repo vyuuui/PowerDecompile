@@ -27,7 +27,7 @@ public:
   bool load_from(std::istream& source);
 
   reserved_vector<DolSection, 7> const& text_section_headers() const { return _text_sections; }
-  reserved_vector<DolSection, 11> const& data_Section_headers() const { return _data_sections; }
+  reserved_vector<DolSection, 11> const& data_section_headers() const { return _data_sections; }
 
   virtual ~DolData() {}
 };

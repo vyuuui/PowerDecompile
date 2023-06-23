@@ -3,8 +3,11 @@ BasedOnStyle: Google
 IndentWidth: 2
 ---
 Language: Cpp
+AlignAfterOpenBracket: DontAlign
 AccessModifierOffset: -2
-ColumnLimit: 100
+BinPackParameters: false
+BinPackArguments: false
+ColumnLimit: 120
 DerivePointerAlignment: false
 PointerAlignment: Left
 IncludeBlocks: Regroup 
@@ -17,5 +20,4 @@ IncludeCategories:
     Priority:       3
 ReflowComments: true
 SortIncludes: true
-LambdaBodyIndentation: OuterScope
 ---
