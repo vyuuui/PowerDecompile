@@ -5,6 +5,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include "IntervalTree.hh"
+
 namespace decomp {
 class RandomAccessData;
 
@@ -20,6 +22,10 @@ enum class OutgoingEdgeType {
   kFallthrough,
 };
 
+struct BlockPrivate {
+  virtual ~BlockPrivate() {}
+};
+
 struct BasicBlock {
   // Inclusive start address
   uint32_t block_start;
@@ -27,9 +33,10 @@ struct BasicBlock {
   uint32_t block_end;
   uint32_t block_id;
 
-  // TODO: Add generic extension data to tag onto blocks
   std::vector<std::tuple<IncomingEdgeType, BasicBlock*>> incoming_edges;
   std::vector<std::tuple<OutgoingEdgeType, BasicBlock*>> outgoing_edges;
+
+  BlockPrivate* extension_data = nullptr;
 };
 
 struct Loop {
@@ -43,6 +50,7 @@ struct Loop {
 struct SubroutineGraph {
   BasicBlock* root;
   std::vector<BasicBlock*> nodes_by_id;
+  dinterval_tree<BasicBlock*, uint32_t> nodes_by_range;
   std::vector<BasicBlock*> exit_points;
   std::vector<Loop> loops;
 };

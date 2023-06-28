@@ -213,6 +213,11 @@ SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_st
     }
   }
 
+  // Fill range tree with node ranges
+  dfs_forward([&graph](BasicBlock* cur) { graph.nodes_by_range.try_emplace(cur->block_start, cur->block_end, cur); },
+      [](BasicBlock*, BasicBlock*) { return true; },
+      graph.root);
+
   // Loop detection algorithm
   //   For each node in the graph
   //   If the node has at least one in edge not in its future set and at least one in edge in its future set
