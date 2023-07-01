@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include "CodeWarriorABIConfiguration.hh"
+#include "RegisterBinding.hh"
 #include "SubroutineGraph.hh"
 #include "dbgutil/DisasmWrite.hh"
 #include "producers/DolData.hh"
@@ -77,6 +78,8 @@ int summarize_subroutine(char** cmd_args) {
   }
 
   SubroutineGraph graph = create_graph(dol_data, analysis_start);
+  evaluate_bindings(dol_data, graph);
+
   std::vector<BasicBlock*> next;
   std::set<BasicBlock*> visited;
   next.push_back(graph.root);
@@ -89,6 +92,28 @@ int summarize_subroutine(char** cmd_args) {
 
     visited.emplace(cur);
     std::cout << fmt::format("Block 0x{:08x} -- 0x{:08x}\n", cur->block_start, cur->block_end);
+
+    RegisterLifetimes* bbp = static_cast<RegisterLifetimes*>(cur->extension_data);
+    std::cout << "\tInput regs: ";
+    for (uint32_t i = 0; i < 32; i++) {
+      if (bbp->_input.in_set(static_cast<GPR>(i))) {
+        std::cout << fmt::format("r{} ", i);
+      }
+    }
+
+    std::cout << "\n\tOutput regs: ";
+    for (uint32_t i = 0; i < 32; i++) {
+      if (bbp->_output.in_set(static_cast<GPR>(i))) {
+        std::cout << fmt::format("r{} ", i);
+      }
+    }
+    std::cout << "\n\tOverwritten regs: ";
+    for (uint32_t i = 0; i < 32; i++) {
+      if (bbp->_overwritten.in_set(static_cast<GPR>(i))) {
+        std::cout << fmt::format("r{} ", i);
+      }
+    }
+    std::cout << "\n";
 
     for (auto& pair : cur->outgoing_edges) {
       BasicBlock* out = std::get<1>(pair);

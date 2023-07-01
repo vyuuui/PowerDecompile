@@ -26,15 +26,23 @@ namespace decomp {
 //   -> Continue while propagation still occurs
 
 template <GPR... gprs>
-constexpr RegSet<GPR> gpr_mask() {
+constexpr RegSet<GPR> gpr_mask_literal() {
   return RegSet<GPR>{(0 | ... | (1 << static_cast<uint8_t>(gprs)))};
 }
 template <FPR... gprs>
-constexpr RegSet<FPR> fpr_mask() {
+constexpr RegSet<FPR> fpr_mask_literal() {
   return RegSet<FPR>{(0 | ... | (1 << static_cast<uint8_t>(gprs)))};
 }
+template <typename... Ts>
+constexpr RegSet<GPR> gpr_mask(Ts... args) {
+  return RegSet<GPR>{(0 | ... | static_cast<uint32_t>(1 << static_cast<uint8_t>(args)))};
+}
+template <typename... Ts>
+constexpr RegSet<FPR> fpr_mask(Ts... args) {
+  return RegSet<FPR>{(0 | ... | static_cast<uint32_t>(1 << static_cast<uint8_t>(args)))};
+}
 
-constexpr RegSet<GPR> kCallerSavedGpr = gpr_mask<GPR::kR0,
+constexpr RegSet<GPR> kCallerSavedGpr = gpr_mask_literal<GPR::kR0,
     GPR::kR3,
     GPR::kR4,
     GPR::kR5,
@@ -45,7 +53,7 @@ constexpr RegSet<GPR> kCallerSavedGpr = gpr_mask<GPR::kR0,
     GPR::kR10,
     GPR::kR11,
     GPR::kR12>();
-// constexpr RegSet<FPR> kCallerSavedFpr = fpr_mask<FPR::kF0,
+// constexpr RegSet<FPR> kCallerSavedFpr = fpr_mask_literal<FPR::kF0,
 //     FPR::kF1,
 //     FPR::kF2,
 //     FPR::kF3,
@@ -171,11 +179,19 @@ void process_block(RandomAccessData const& ram, BasicBlock* block) {
       for (DataSource const& read : inst._reads) {
         if (std::holds_alternative<GPR>(read)) {
           use += std::get<GPR>(read);
+        } else if (std::holds_alternative<MemRegReg>(read)) {
+          use += gpr_mask(std::get<MemRegReg>(read)._base, std::get<MemRegReg>(read)._offset);
+        } else if (std::holds_alternative<MemRegOff>(read)) {
+          use += std::get<MemRegOff>(read)._base;
         }
       }
       for (DataSource const& write : inst._writes) {
         if (std::holds_alternative<GPR>(write)) {
           def += std::get<GPR>(write);
+        } else if (std::holds_alternative<MemRegReg>(write)) {
+          use += gpr_mask(std::get<MemRegReg>(write)._base, std::get<MemRegReg>(write)._offset);
+        } else if (std::holds_alternative<MemRegOff>(write)) {
+          use += std::get<MemRegOff>(write)._base;
         }
       }
       // Any updating write does not count as a define
@@ -186,13 +202,43 @@ void process_block(RandomAccessData const& ram, BasicBlock* block) {
     block_inputs += use - defined_mask;
     block_outputs = (block_outputs - kill + def + use);
 
-    bindings->_live_in.push_back(live_in);
-    bindings->_live_out.push_back(use + live_in - kill);
+    bindings->_def.push_back(def);
+    bindings->_use.push_back(use);
     bindings->_kill.push_back(kill);
+
+    bindings->_live_in.push_back(live_in);
+    bindings->_live_out.push_back(live_in + use + def - kill);
   }
 
   bindings->_input = block_inputs;
   bindings->_output = block_outputs;
+  bindings->_overwritten = defined_mask;
+}
+
+bool propagate_block(RandomAccessData const& ram, BasicBlock* block) {
+  RegisterLifetimes* lifetimes = static_cast<RegisterLifetimes*>(block->extension_data);
+
+  RegSet<GPR> additional_inputs;
+  for (auto&& [_, incoming] : block->incoming_edges) {
+    additional_inputs += static_cast<RegisterLifetimes*>(incoming->extension_data)->_output;
+  }
+  // Kill any registers that are overwritten in this block, excluding any inputs
+  lifetimes->_killed_at_entry += (additional_inputs - lifetimes->_input) & lifetimes->_overwritten;
+  // Additional inputs should only include new (passthrough) registers
+  additional_inputs -= lifetimes->_killed_at_entry + lifetimes->_input;
+
+  if (additional_inputs.empty()) {
+    return false;
+  }
+
+  for (size_t i = 0; i < lifetimes->_live_in.size(); i++) {
+    lifetimes->_live_in[i] += additional_inputs;
+    lifetimes->_live_out[i] += additional_inputs;
+  }
+
+  lifetimes->_input += additional_inputs;
+  lifetimes->_output += additional_inputs;
+  return true;
 }
 
 }  // namespace
@@ -200,5 +246,13 @@ void process_block(RandomAccessData const& ram, BasicBlock* block) {
 void evaluate_bindings(RandomAccessData const& ram, SubroutineGraph& graph) {
   dfs_forward(
       [&ram](BasicBlock* cur) { process_block(ram, cur); }, [](BasicBlock*, BasicBlock*) { return true; }, graph.root);
+
+  bool did_change;
+  do {
+    did_change = false;
+    dfs_forward([&ram, &did_change](BasicBlock* cur) { did_change |= propagate_block(ram, cur); },
+        [](BasicBlock*, BasicBlock*) { return true; },
+        graph.root);
+  } while (did_change);
 }
 }  // namespace decomp

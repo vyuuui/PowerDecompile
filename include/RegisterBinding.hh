@@ -31,27 +31,47 @@ struct RegSet {
   constexpr RegSet(uint32_t s) : _set(s) {}
 
   constexpr bool in_set(T reg) const { return ((1 << static_cast<uint8_t>(reg)) & _set) != 0; }
+  constexpr bool empty() const { return _set == 0; }
+  constexpr bool operator==(RegSet rhs) const { return _set == rhs._set; }
 
+  // Add register to set
   constexpr void operator+=(T reg) { _set |= 1 << static_cast<uint8_t>(reg); }
+  // Set union
   constexpr void operator+=(RegSet s) { _set |= s._set; }
 
+  // Remove register from set
   constexpr void operator-=(T reg) { _set &= ~(1 << static_cast<uint8_t>(reg)); }
+  // Set difference
   constexpr void operator-=(RegSet s) { _set &= ~s._set; }
 
+  // Set intersection
+  constexpr void operator&=(RegSet s) { _set &= s._set; }
+
+  // Set union
   constexpr RegSet operator+(RegSet rhs) const { return _set | rhs._set; }
+  // Set difference
   constexpr RegSet operator-(RegSet rhs) const { return _set & ~rhs._set; }
+  // Set intersection
+  constexpr RegSet operator&(RegSet rhs) const { return _set & rhs._set; }
 };
 
 struct RegisterLifetimes : public BlockPrivate {
+  // Registers (re)defined by this instruction
+  std::vector<RegSet<GPR>> _def;
+  // Registers (re)defined by this instruction
+  std::vector<RegSet<GPR>> _use;
+  // Registers scrapped by this instruction
+  std::vector<RegSet<GPR>> _kill;
   // Registers alive going into X instruction
   std::vector<RegSet<GPR>> _live_in;
   // Registers alive going out of X instruction
   std::vector<RegSet<GPR>> _live_out;
-  // Registers scrapped by this instruction
-  std::vector<RegSet<GPR>> _kill;
 
   RegSet<GPR> _input;
   RegSet<GPR> _output;
+  // Set of all registers that are overwritten by this block
+  RegSet<GPR> _overwritten;
+  RegSet<GPR> _killed_at_entry;
   virtual ~RegisterLifetimes() {}
 };
 
