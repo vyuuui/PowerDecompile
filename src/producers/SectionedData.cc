@@ -81,4 +81,6 @@ double SectionedData::read_double(uint32_t vaddr) const {
   return *opt;
 }
 
+Section const* SectionedData::section_for_vaddr(uint32_t vaddr) const { return _regions.query(vaddr, vaddr + 1); }
+
 }  // namespace decomp

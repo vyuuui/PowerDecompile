@@ -2,8 +2,8 @@
 
 #include <array>
 
-#include "ReservedVector.hh"
 #include "producers/SectionedData.hh"
+#include "utl/ReservedVector.hh"
 
 namespace decomp {
 struct DolSection {
@@ -17,6 +17,7 @@ private:
   reserved_vector<DolSection, 7> _text_sections;
   reserved_vector<DolSection, 11> _data_sections;
   DolSection _bss_section;
+  uint32_t _entrypoint;
 
   bool sanity_check_header(size_t file_size);
 
@@ -28,6 +29,7 @@ public:
 
   reserved_vector<DolSection, 7> const& text_section_headers() const { return _text_sections; }
   reserved_vector<DolSection, 11> const& data_section_headers() const { return _data_sections; }
+  uint32_t entrypoint() const { return _entrypoint; }
 
   virtual ~DolData() {}
 };

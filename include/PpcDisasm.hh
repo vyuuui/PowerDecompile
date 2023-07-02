@@ -6,7 +6,7 @@
 
 #include "DataSource.hh"
 #include "FlagsEnum.hh"
-#include "ReservedVector.hh"
+#include "utl/ReservedVector.hh"
 
 namespace decomp {
 // Operation as determined by the opcode and possible function code

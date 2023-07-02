@@ -5,7 +5,7 @@
 #include <iostream>
 
 #include "DataSource.hh"
-#include "ReservedVector.hh"
+#include "utl/ReservedVector.hh"
 
 namespace decomp {
 namespace {

@@ -5,7 +5,8 @@
 #include <unordered_set>
 #include <vector>
 
-#include "IntervalTree.hh"
+#include "PpcDisasm.hh"
+#include "utl/IntervalTree.hh"
 
 namespace decomp {
 class RandomAccessData;
@@ -35,6 +36,8 @@ struct BasicBlock {
 
   std::vector<std::tuple<IncomingEdgeType, BasicBlock*>> incoming_edges;
   std::vector<std::tuple<OutgoingEdgeType, BasicBlock*>> outgoing_edges;
+
+  std::vector<MetaInst> instructions;
 
   BlockPrivate* extension_data = nullptr;
 };

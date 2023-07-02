@@ -2,8 +2,8 @@
 
 #include <vector>
 
-#include "IntervalTree.hh"
 #include "producers/RandomAccessData.hh"
+#include "utl/IntervalTree.hh"
 
 namespace decomp {
 struct Section {
@@ -38,6 +38,8 @@ public:
   uint64_t read_long(uint32_t vaddr) const override;
   float read_float(uint32_t vaddr) const override;
   double read_double(uint32_t vaddr) const override;
+
+  Section const* section_for_vaddr(uint32_t vaddr) const;
 };
 
 }  // namespace decomp

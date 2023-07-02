@@ -120,6 +120,9 @@ bool DolData::load_from(std::istream& source) {
     add_section(dsect._vaddr, std::move(raw_readout));
   }
 
+  source.seekg(0xe0, std::ios::beg);
+  source >> byteswap_prim(_entrypoint);
+
   return true;
 }
 }  // namespace decomp

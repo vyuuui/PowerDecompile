@@ -17,5 +17,4 @@ struct CWABIConfiguration {
   std::optional<uint32_t> _restgpr_start;
 };
 
-extern CWABIConfiguration gAbiConfig;
 }  // namespace decomp

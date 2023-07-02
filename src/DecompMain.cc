@@ -7,16 +7,12 @@
 #include <string>
 #include <string_view>
 
+#include "BinaryContext.hh"
 #include "CodeWarriorABIConfiguration.hh"
 #include "RegisterBinding.hh"
 #include "SubroutineGraph.hh"
 #include "dbgutil/DisasmWrite.hh"
 #include "producers/DolData.hh"
-
-// TODO: consider moving me
-namespace decomp {
-CWABIConfiguration gAbiConfig;
-}  // namespace decomp
 
 namespace {
 using namespace decomp;
@@ -64,21 +60,25 @@ void print_usage(char const* progname) {
 int summarize_subroutine(char** cmd_args) {
   uint32_t analysis_start = strtoll(cmd_args[1], nullptr, 16);
 
-  DolData dol_data;
+  BinaryContext ctx;
   {
     std::ifstream file_in(cmd_args[0], std::ios::binary);
     if (!file_in.is_open()) {
       std::cerr << fmt::format("Failed to open path {}\n", cmd_args[0]);
       return 1;
     }
-    if (!dol_data.load_from(file_in)) {
-      std::cerr << fmt::format("Provided file {} is not a DOL\n", cmd_args[0]);
+
+    ErrorOr<BinaryContext> result = create_from_stream(file_in, BinaryType::kDOL);
+    if (result.is_error()) {
+      std::cerr << fmt::format("Failed to open path {}, reason: {}\n", cmd_args[0], result.err());
       return 1;
     }
+
+    ctx = std::move(result.val());
   }
 
-  SubroutineGraph graph = create_graph(dol_data, analysis_start);
-  evaluate_bindings(dol_data, graph);
+  SubroutineGraph graph = create_graph(*ctx._ram, analysis_start);
+  evaluate_bindings(graph, ctx);
 
   std::vector<BasicBlock*> next;
   std::set<BasicBlock*> visited;

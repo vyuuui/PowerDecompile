@@ -213,8 +213,14 @@ SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_st
     }
   }
 
-  // Fill range tree with node ranges
-  dfs_forward([&graph](BasicBlock* cur) { graph.nodes_by_range.try_emplace(cur->block_start, cur->block_end, cur); },
+  // Fill out block data now that blocks have been fully defined
+  dfs_forward(
+      [&graph, &ram](BasicBlock* cur) {
+        for (uint32_t addr = cur->block_start; addr < cur->block_end; addr += 4) {
+          cur->instructions.emplace_back(ram.read_instruction(addr));
+        }
+        graph.nodes_by_range.try_emplace(cur->block_start, cur->block_end, cur);
+      },
       [](BasicBlock*, BasicBlock*) { return true; },
       graph.root);
 

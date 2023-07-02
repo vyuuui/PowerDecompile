@@ -6,7 +6,7 @@
 #include <set>
 #include <variant>
 
-#include "CodeWarriorABIConfiguration.hh"
+#include "BinaryContext.hh"
 #include "DataSource.hh"
 #include "FlagsEnum.hh"
 #include "PpcDisasm.hh"
@@ -73,70 +73,7 @@ uint32_t branch_target(MetaInst const& inst, uint32_t addr) {
   return addr + std::get<RelBranch>(inst._immediates[0])._rel_32;
 }
 
-bool abi_routine(RandomAccessData const& ram, uint32_t addr) {
-  constexpr auto detect_savegpr = [](RandomAccessData const& ram, uint32_t addr) -> bool {
-    MetaInst inst = ram.read_instruction(addr);
-    if (inst._op != InstOperation::kStw || std::get<GPR>(inst._reads[0]) < GPR::kR14 ||
-        std::get<MemRegOff>(inst._writes[0])._base != GPR::kR11) {
-      return false;
-    }
-
-    int cur_savegpr = static_cast<int>(std::get<GPR>(inst._writes[0])) + 1;
-    for (;; addr += 4) {
-      inst = ram.read_instruction(addr);
-      if (is_blr(inst)) {
-        return true;
-      }
-
-      if (inst._op != InstOperation::kStw || static_cast<int>(std::get<GPR>(inst._reads[0])) != cur_savegpr ||
-          std::get<MemRegOff>(inst._writes[0])._base != GPR::kR11) {
-        break;
-      }
-      cur_savegpr++;
-    }
-    return false;
-  };
-  constexpr auto detect_restgpr = [](RandomAccessData const& ram, uint32_t addr) -> bool {
-    MetaInst inst = ram.read_instruction(addr);
-    if (inst._op != InstOperation::kLwz || std::get<GPR>(inst._writes[0]) < GPR::kR14 ||
-        std::get<MemRegOff>(inst._reads[0])._base != GPR::kR11) {
-      return false;
-    }
-
-    int cur_restgpr = static_cast<int>(std::get<GPR>(inst._reads[0])) + 1;
-    for (;; addr += 4) {
-      inst = ram.read_instruction(addr);
-      if (is_blr(inst)) {
-        return true;
-      }
-
-      if (inst._op != InstOperation::kStw || static_cast<int>(std::get<GPR>(inst._writes[0])) != cur_restgpr ||
-          std::get<MemRegOff>(inst._reads[0])._base != GPR::kR11) {
-        break;
-      }
-      cur_restgpr++;
-    }
-    return false;
-  };
-  constexpr auto in_save_rest_range = [](uint32_t save_rest, uint32_t addr) -> bool {
-    return (addr - save_rest) >> 2 < 18;
-  };
-
-  if ((gAbiConfig._savegpr_start && in_save_rest_range(*gAbiConfig._savegpr_start, addr)) ||
-      (gAbiConfig._restgpr_start && in_save_rest_range(*gAbiConfig._restgpr_start, addr))) {
-    return true;
-  }
-  if (detect_savegpr(ram, addr)) {
-    return true;
-  }
-  if (detect_restgpr(ram, addr)) {
-    return true;
-  }
-
-  return false;
-}
-
-void process_block(RandomAccessData const& ram, BasicBlock* block) {
+void process_block(BasicBlock* block, BinaryContext const& ctx) {
   RegisterLifetimes* bindings;
   if (block->extension_data == nullptr) {
     bindings = new RegisterLifetimes();
@@ -147,8 +84,9 @@ void process_block(RandomAccessData const& ram, BasicBlock* block) {
   RegSet<GPR> block_outputs;
   RegSet<GPR> defined_mask;
 
-  for (uint32_t addr = block->block_start; addr < block->block_end; addr += 4) {
-    MetaInst inst = ram.read_instruction(addr);
+  for (size_t i = 0; i < block->instructions.size(); i++) {
+    uint32_t addr = block->block_start + static_cast<uint32_t>(i * 4);
+    MetaInst const& inst = block->instructions[i];
 
     // Naming convention:
     // live_in: Registers live coming into this instruction
@@ -169,7 +107,7 @@ void process_block(RandomAccessData const& ram, BasicBlock* block) {
     // TODO: guess plausible returns
     // TODO: floating point, control fields
     if (check_flags(inst._flags, InstFlags::kWritesLR)) {
-      if (inst._op == InstOperation::kB && !abi_routine(ram, branch_target(inst, addr))) {
+      if (inst._op == InstOperation::kB && !is_abi_routine(ctx, branch_target(inst, addr))) {
         kill += kCallerSavedGpr;
       } else if (inst._op == InstOperation::kBclr || inst._op == InstOperation::kBc ||
                  inst._op == InstOperation::kBcctr) {
@@ -215,7 +153,7 @@ void process_block(RandomAccessData const& ram, BasicBlock* block) {
   bindings->_overwritten = defined_mask;
 }
 
-bool propagate_block(RandomAccessData const& ram, BasicBlock* block) {
+bool propagate_block(BasicBlock* block) {
   RegisterLifetimes* lifetimes = static_cast<RegisterLifetimes*>(block->extension_data);
 
   RegSet<GPR> additional_inputs;
@@ -243,14 +181,14 @@ bool propagate_block(RandomAccessData const& ram, BasicBlock* block) {
 
 }  // namespace
 
-void evaluate_bindings(RandomAccessData const& ram, SubroutineGraph& graph) {
+void evaluate_bindings(SubroutineGraph& graph, BinaryContext const& ctx) {
   dfs_forward(
-      [&ram](BasicBlock* cur) { process_block(ram, cur); }, [](BasicBlock*, BasicBlock*) { return true; }, graph.root);
+      [&ctx](BasicBlock* cur) { process_block(cur, ctx); }, [](BasicBlock*, BasicBlock*) { return true; }, graph.root);
 
   bool did_change;
   do {
     did_change = false;
-    dfs_forward([&ram, &did_change](BasicBlock* cur) { did_change |= propagate_block(ram, cur); },
+    dfs_forward([&did_change](BasicBlock* cur) { did_change |= propagate_block(cur); },
         [](BasicBlock*, BasicBlock*) { return true; },
         graph.root);
   } while (did_change);

@@ -4,6 +4,7 @@
 #include <variant>
 #include <vector>
 
+#include "BinaryContext.hh"
 #include "DataSource.hh"
 #include "SubroutineGraph.hh"
 
@@ -75,6 +76,6 @@ struct RegisterLifetimes : public BlockPrivate {
   virtual ~RegisterLifetimes() {}
 };
 
-void evaluate_bindings(RandomAccessData const& ram, SubroutineGraph& graph);
+void evaluate_bindings(SubroutineGraph& graph, BinaryContext const& ctx);
 
 }  // namespace decomp
