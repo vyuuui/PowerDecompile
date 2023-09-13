@@ -1,12 +1,9 @@
-#include "dbgutil/DisasmWrite.hh"
+#include "dbgutil/DbgUtilShared.hh"
 
 #include <fmt/format.h>
 
-#include <iostream>
 #include <string>
 #include <variant>
-
-#include "PpcDisasm.hh"
 
 namespace decomp {
 namespace {
@@ -16,6 +13,66 @@ struct overloaded : Ts... {
 };
 template <class... Ts>
 overloaded(Ts...) -> overloaded<Ts...>;
+
+std::string spr_name(SPR spr) {
+  switch (spr) {
+    case SPR::kLr:
+      return "LR";
+    case SPR::kCtr:
+      return "CTR";
+    case SPR::kXer:
+      return "XER";
+    default:
+      return fmt::format("SPRG#{}", static_cast<int>(spr));
+  }
+}
+
+std::string tbr_name(TBR tbr) {
+  switch (tbr) {
+    case TBR::kTbl:
+      return "TBL";
+    case TBR::kTbu:
+      return "TBU";
+    default:
+      return fmt::format("Invalid TBR#{}", static_cast<int>(tbr));
+  }
+}
+
+std::string disasm_bitfield(uint32_t bitfield, CRBitDisasmFormat format) {
+  switch (format) {
+    case CRBitDisasmFormat::SingleBit:
+      for (int i = 0; i < 32; i++) {
+        if (bitfield & 1) {
+          return fmt::format("{}", i);
+        }
+        bitfield >>= 1;
+      }
+      return "invalid";
+
+    case CRBitDisasmFormat::Field:
+      for (int i = 0; i < 8; i++) {
+        if ((bitfield & 0xf) == 0xf) {
+          return fmt::format("{}", i);
+        }
+        bitfield >>= 4;
+      }
+      return "invalid";
+
+    case CRBitDisasmFormat::Mask: {
+      uint32_t mask = 0;
+      for (int i = 0; i < 8; i++) {
+        if ((bitfield & 0xf) == 0xf) {
+          mask |= (1 << i);
+        }
+        bitfield >>= 4;
+      }
+      return fmt::format("{}", mask);
+    }
+  }
+
+}
+
+}  // namespace
 
 std::string operation_name(InstOperation op) {
   switch (op) {
@@ -468,31 +525,7 @@ std::string operation_name(InstOperation op) {
   }
 }
 
-std::string spr_name(SPR spr) {
-  switch (spr) {
-    case SPR::kLr:
-      return "LR";
-    case SPR::kCtr:
-      return "CTR";
-    case SPR::kXer:
-      return "XER";
-    default:
-      return fmt::format("SPRG#{}", static_cast<int>(spr));
-  }
-}
-
-std::string tbr_name(TBR tbr) {
-  switch (tbr) {
-    case TBR::kTbl:
-      return "TBL";
-    case TBR::kTbu:
-      return "TBU";
-    default:
-      return fmt::format("Invalid TBR#{}", static_cast<int>(tbr));
-  }
-}
-
-std::string datasource_to_string(DataSource const& src) {
+std::string datasource_verbose(DataSource const& src) {
   return std::visit(
       overloaded{[](GPR gpr) -> std::string { return fmt::format("r{}", static_cast<int>(gpr)); },
           [](FPR fpr) -> std::string { return fmt::format("f{}", static_cast<int>(fpr)); },
@@ -509,7 +542,7 @@ std::string datasource_to_string(DataSource const& src) {
       src);
 }
 
-std::string immsource_to_string(ImmSource const& src) {
+std::string immsource_verbose(ImmSource const& src) {
   return std::visit(overloaded{
                         [](SIMM simm) -> std::string { return fmt::format("signed {}", simm._imm_value); },
                         [](UIMM uimm) -> std::string { return fmt::format("unsigned {}", uimm._imm_value); },
@@ -518,37 +551,36 @@ std::string immsource_to_string(ImmSource const& src) {
                     },
       src);
 }
-}  // namespace
 
-void write_inst_info(MetaInst const& inst, std::ostream& sink) {
-  if (inst._op == InstOperation::kInvalid) {
-    sink << "Invalid decode" << std::endl;
-    return;
-  }
+std::string datasource_disasm(DataSource const& src) {
+  return std::visit(
+      overloaded{[](GPR gpr) -> std::string { return fmt::format("r{}", static_cast<int>(gpr)); },
+          [](FPR fpr) -> std::string { return fmt::format("f{}", static_cast<int>(fpr)); },
+          [](MemRegOff mem) -> std::string { return fmt::format("r{}({})", static_cast<int>(mem._base), mem._offset); },
+          [](MemRegReg mem) -> std::string {
+            return fmt::format("r{}, r{}", static_cast<int>(mem._base), static_cast<int>(mem._offset));
+          },
+          [](SPR spr) -> std::string { return spr_name(spr); },
+          [](TBR tbr) -> std::string { return tbr_name(tbr); },
+          [](auto) -> std::string { return ""; }},
+      src);
+}
 
-  auto print_list = [&sink](auto const& list, auto cb) {
-    if (list.empty()) {
-      return;
-    }
-    sink << cb(list[0]);
-    for (size_t i = 1; i < list.size(); i++) {
-      sink << ", " << cb(list[i]);
-    }
-  };
+std::string immsource_disasm(ImmSource const& src) {
+  return std::visit(overloaded{
+                        [](SIMM simm) -> std::string { return fmt::format("{}", simm._imm_value); },
+                        [](UIMM uimm) -> std::string { return fmt::format("{}", uimm._imm_value); },
+                        [](RelBranch br) -> std::string { return fmt::format("{:x}", br._rel_32); },
+                        [](AuxImm aux) -> std::string { return fmt::format("{}", aux._val); },
+                    },
+      src);
+}
 
-  sink << fmt::format("Binst: {:08x}", inst._binst);
-  sink << "\nOperand: " << operation_name(inst._op);
-  sink << "\nReads: ";
-  print_list(inst._reads, datasource_to_string);
+std::string disasm_crbit(CRBit crbits, CRBitDisasmFormat format) {
+  return disasm_bitfield(static_cast<uint32_t>(crbits), format);
+}
 
-  sink << "\nImmediates: ";
-  print_list(inst._immediates, immsource_to_string);
-
-  sink << "\nWrites: ";
-  print_list(inst._writes, datasource_to_string);
-
-  sink << fmt::format("\nFlags: {:b}", static_cast<uint32_t>(inst._flags));
-
-  sink << std::endl;
+std::string disasm_fpscrbit(FPSCRBit fpscrbits, CRBitDisasmFormat format) {
+  return disasm_bitfield(static_cast<uint32_t>(fpscrbits), format);
 }
 }  // namespace decomp

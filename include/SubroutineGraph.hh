@@ -56,6 +56,14 @@ struct SubroutineGraph {
   dinterval_tree<BasicBlock*, uint32_t> nodes_by_range;
   std::vector<BasicBlock*> exit_points;
   std::vector<Loop> loops;
+
+  BasicBlock const* block_by_vaddr(uint32_t vaddr) const {
+    auto result = nodes_by_range.query(vaddr, vaddr + 4);
+    return result == nullptr ? nullptr : *result;
+  }
+  BasicBlock* block_by_vaddr(uint32_t vaddr) {
+    return const_cast<BasicBlock*>(const_cast<SubroutineGraph const*>(this)->block_by_vaddr(vaddr));
+  }
 };
 
 template <bool Forward, typename Visit, typename Iterate, typename... Annotation>
