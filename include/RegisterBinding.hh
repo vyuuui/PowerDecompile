@@ -34,6 +34,7 @@ struct RegSet {
   constexpr bool in_set(T reg) const { return ((1 << static_cast<uint8_t>(reg)) & _set) != 0; }
   constexpr bool empty() const { return _set == 0; }
   constexpr bool operator==(RegSet rhs) const { return _set == rhs._set; }
+  constexpr bool operator!=(RegSet rhs) const { return _set != rhs._set; }
 
   // Add register to set
   constexpr void operator+=(T reg) { _set |= 1 << static_cast<uint8_t>(reg); }
@@ -59,13 +60,13 @@ struct RegSet {
 struct RegisterLifetimes : public BlockPrivate {
   // Registers (re)defined by this instruction
   std::vector<RegSet<GPR>> _def;
-  // Registers (re)defined by this instruction
+  // Registers referenced by this instruction
   std::vector<RegSet<GPR>> _use;
   // Registers scrapped by this instruction
   std::vector<RegSet<GPR>> _kill;
-  // Registers alive going into X instruction
+  // Registers alive going into this instruction
   std::vector<RegSet<GPR>> _live_in;
-  // Registers alive going out of X instruction
+  // Registers alive going out of this instruction
   std::vector<RegSet<GPR>> _live_out;
 
   RegSet<GPR> _input;
@@ -73,6 +74,8 @@ struct RegisterLifetimes : public BlockPrivate {
   // Set of all registers that are overwritten by this block
   RegSet<GPR> _overwritten;
   RegSet<GPR> _killed_at_entry;
+  // Set of registers that could be the result of a return
+  RegSet<GPR> _untouched_retval;
   virtual ~RegisterLifetimes() {}
 };
 

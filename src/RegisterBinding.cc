@@ -14,7 +14,6 @@
 #include "producers/RandomAccessData.hh"
 
 namespace decomp {
-// REWORK:
 // process each block independent of other blocks, collect the following:
 //   -> Uses without def = Input temp list
 //   -> Defines within block
@@ -24,6 +23,10 @@ namespace decomp {
 //   -> ElseIf an output var from an input **node** is not clobbered by this node, advertise it in the output temp list
 //   -> Else no propagation
 //   -> Continue while propagation still occurs
+// Resolving return values
+//   -> Mark r3/r4 usages before block end that are untouched
+//   -> propagate "possible usages" alongside real usages
+//   -> if a possible return val is used in an output block, transform it from retval to passthrough
 
 template <GPR... gprs>
 constexpr RegSet<GPR> gpr_mask_literal() {
@@ -42,6 +45,7 @@ constexpr RegSet<FPR> fpr_mask(Ts... args) {
   return RegSet<FPR>{(0 | ... | static_cast<uint32_t>(1 << static_cast<uint8_t>(args)))};
 }
 
+constexpr RegSet<GPR> kReturnSet = gpr_mask_literal<GPR::kR3, GPR::kR4>();
 constexpr RegSet<GPR> kCallerSavedGpr = gpr_mask_literal<GPR::kR0,
     GPR::kR3,
     GPR::kR4,
@@ -83,6 +87,7 @@ void process_block(BasicBlock* block, BinaryContext const& ctx) {
   RegSet<GPR> block_inputs;
   RegSet<GPR> block_outputs;
   RegSet<GPR> defined_mask;
+  std::optional<size_t> last_call_index;
 
   for (size_t i = 0; i < block->instructions.size(); i++) {
     uint32_t addr = block->block_start + static_cast<uint32_t>(i * 4);
@@ -103,15 +108,16 @@ void process_block(BasicBlock* block, BinaryContext const& ctx) {
       live_in = bindings->_live_out.back();
     }
 
-    // Function calls => kill caller saves
-    // TODO: guess plausible returns
     // TODO: floating point, control fields
+    // Function calls => kill caller saves
     if (check_flags(inst._flags, InstFlags::kWritesLR)) {
       if (inst._op == InstOperation::kB && !is_abi_routine(ctx, branch_target(inst, addr))) {
         kill += kCallerSavedGpr;
+        last_call_index = i;
       } else if (inst._op == InstOperation::kBclr || inst._op == InstOperation::kBc ||
                  inst._op == InstOperation::kBcctr) {
         kill += kCallerSavedGpr;
+        last_call_index = i;
       }
     } else {
       for (DataSource const& read : inst._reads) {
@@ -136,10 +142,26 @@ void process_block(BasicBlock* block, BinaryContext const& ctx) {
       def -= use;
     }
 
+    // Register is a return value when
+    //  1. The register referenced is a return register
+    //  2. The register referenced is not live coming into this instruction
+    //  3. There was a call prior to this instruction
+    RegSet<GPR> used_rets = use & kReturnSet;
+    if (last_call_index && !used_rets.empty() && (live_in & used_rets).empty()) {
+      bindings->_def[*last_call_index] += used_rets;
+      bindings->_kill[*last_call_index] -= used_rets;
+      for (size_t j = *last_call_index; j < i; j++) {
+        bindings->_live_out[j] += used_rets;
+        bindings->_live_in[j + 1] = bindings->_live_out[j];
+      }
+    }
+
     defined_mask += kill + def;
     block_inputs += use - defined_mask;
     block_outputs = (block_outputs - kill + def + use);
 
+    // Return values must be the result of a kill, excluding things defined and used
+    bindings->_untouched_retval += (kill - def - use) & kReturnSet;
     bindings->_def.push_back(def);
     bindings->_use.push_back(use);
     bindings->_kill.push_back(kill);
@@ -153,29 +175,66 @@ void process_block(BasicBlock* block, BinaryContext const& ctx) {
   bindings->_overwritten = defined_mask;
 }
 
-bool propagate_block(BasicBlock* block) {
+bool backpropagate_retvals(BasicBlock* block) {
   RegisterLifetimes* lifetimes = static_cast<RegisterLifetimes*>(block->extension_data);
 
-  RegSet<GPR> additional_inputs;
-  for (auto&& [_, incoming] : block->incoming_edges) {
-    additional_inputs += static_cast<RegisterLifetimes*>(incoming->extension_data)->_output;
+  RegSet<GPR> retval_outputs;
+  for (auto&& [_, outgoing] : block->outgoing_edges) {
+    retval_outputs += static_cast<RegisterLifetimes*>(outgoing->extension_data)->_input;
   }
-  // Kill any registers that are overwritten in this block, excluding any inputs
-  lifetimes->_killed_at_entry += (additional_inputs - lifetimes->_input) & lifetimes->_overwritten;
-  // Additional inputs should only include new (passthrough) registers
-  additional_inputs -= lifetimes->_killed_at_entry + lifetimes->_input;
+  retval_outputs &= kReturnSet;
 
-  if (additional_inputs.empty()) {
+  // Any outputs that overlap with this block's untouched retvals should backpropagate
+  RegSet<GPR> confirmed_ret_usages = retval_outputs & lifetimes->_untouched_retval;
+
+  // There is nothing to backpropagate
+  if (confirmed_ret_usages.empty()) {
     return false;
   }
 
   for (size_t i = 0; i < lifetimes->_live_in.size(); i++) {
-    lifetimes->_live_in[i] += additional_inputs;
-    lifetimes->_live_out[i] += additional_inputs;
+    lifetimes->_live_in[i] += confirmed_ret_usages;
+    lifetimes->_live_out[i] += confirmed_ret_usages;
   }
 
-  lifetimes->_input += additional_inputs;
-  lifetimes->_output += additional_inputs;
+  lifetimes->_input += confirmed_ret_usages;
+  lifetimes->_output += confirmed_ret_usages;
+  lifetimes->_untouched_retval -= confirmed_ret_usages;
+
+  return true;
+}
+
+bool propagate_block(BasicBlock* block) {
+  RegisterLifetimes* lifetimes = static_cast<RegisterLifetimes*>(block->extension_data);
+
+  RegSet<GPR> passthrough_inputs;
+  RegSet<GPR> passthrough_retvals;
+  for (auto&& [_, incoming] : block->incoming_edges) {
+    passthrough_inputs += static_cast<RegisterLifetimes*>(incoming->extension_data)->_output;
+    passthrough_retvals += static_cast<RegisterLifetimes*>(incoming->extension_data)->_untouched_retval;
+  }
+
+  // Kill any registers that are overwritten in this block, excluding any inputs
+  lifetimes->_killed_at_entry += (passthrough_inputs - lifetimes->_input) & lifetimes->_overwritten;
+  // Additional inputs should only include new (passthrough) registers
+  passthrough_inputs -= lifetimes->_killed_at_entry + lifetimes->_input;
+  passthrough_retvals -= lifetimes->_input + lifetimes->_overwritten;
+
+  if (passthrough_inputs.empty() && lifetimes->_untouched_retval == passthrough_retvals) {
+    return backpropagate_retvals(block);
+  }
+
+  lifetimes->_untouched_retval += passthrough_retvals;
+
+  if (!passthrough_inputs.empty()) {
+    for (size_t i = 0; i < lifetimes->_live_in.size(); i++) {
+      lifetimes->_live_in[i] += passthrough_inputs;
+      lifetimes->_live_out[i] += passthrough_inputs;
+    }
+
+    lifetimes->_input += passthrough_inputs;
+    lifetimes->_output += passthrough_inputs;
+  }
   return true;
 }
 
