@@ -717,13 +717,13 @@ void write_operand(BinInst inst, std::ostream& sink) {
   } else if constexpr (f == _Crfs) {
     sink << fmt::format("cr{}", inst.crfs_val());
   } else if constexpr (f == _Crm) {
-    sink << fmt::format("{:02x}", inst.crm_val());
+    sink << fmt::format("{:#x}", inst.crm_val());
   } else if constexpr (f == _D16ra) {
-    sink << fmt::format("{:x}({})", inst.d16(), disasm_reg(inst.ra()));
+    sink << fmt::format("{:#x}({})", inst.d16(), disasm_reg(inst.ra()));
   } else if constexpr (f == _D20ra) {
-    sink << fmt::format("{:x}({})", inst.d20(), disasm_reg(inst.ra()));
+    sink << fmt::format("{:#x}({})", inst.d20(), disasm_reg(inst.ra()));
   } else if constexpr (f == _Fm) {
-    sink << fmt::format("{:02x}", inst.fm_val());
+    sink << fmt::format("{:#x}", inst.fm_val());
   } else if constexpr (f == _Fra) {
     sink << disasm_reg(inst.fra());
   } else if constexpr (f == _Frb) {
@@ -759,13 +759,23 @@ void write_operand(BinInst inst, std::ostream& sink) {
   } else if constexpr (f == _Sh) {
     sink << inst.sh()._val;
   } else if constexpr (f == _Simm) {
-    sink << inst.simm()._imm_value;
+    int32_t val = inst.simm()._imm_value;
+    if (abs(val) < 16) {
+      sink << val;
+    } else {
+      sink << fmt::format("{:#x}", val);
+    }
   } else if constexpr (f == _Sr) {
     sink << inst.sr()._val;
   } else if constexpr (f == _To) {
     sink << inst.to()._val;
   } else if constexpr (f == _Uimm) {
-    sink << inst.uimm()._imm_value;
+    uint32_t val = inst.uimm()._imm_value;
+    if (val < 16) {
+      sink << val;
+    } else {
+      sink << fmt::format("{:#x}", val);
+    }
   } else if constexpr (f == _W) {
     sink << inst.w_val();
   }
@@ -784,7 +794,7 @@ void write_inst_operands(const MetaInst& inst, std::ostream& sink) {
 void write_rel_loc(uint32_t source, uint32_t off, std::ostream& sink) {
   const uint32_t target = source + off;
 
-  sink << fmt::format("{:08x} // -> {:08x}", off, target);
+  sink << fmt::format("{:#x} // -> loc_{:08x}", off, target);
 }
 
 bool write_bcx_pseudo(const MetaInst& inst, std::ostream& sink, char const* form) {
@@ -851,12 +861,14 @@ bool guess_rlwinm(const MetaInst& inst, std::ostream& sink) {
   // If shift is 0, the intent is likely a clrxwi, but not guaranteed
   if (sh == 0) {
     if (mb == 0) {
+      uint8_t n = 31 - me;
       sink << fmt::format(
-          "clrrwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), 31 - sh);
+          "clrrwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n);
       return true;
     } else if (me == 31) {
+      uint8_t n = mb;
       sink << fmt::format(
-          "clrlwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), sh);
+          "clrlwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n);
       return true;
     }
   }
@@ -864,11 +876,13 @@ bool guess_rlwinm(const MetaInst& inst, std::ostream& sink) {
   // Best fits either a rotrwi or rotlwi, so always disassemble it as that
   if (mb == 0 && me == 31) {
     if (sh >= 16) {
+      uint8_t n = 32 - sh;
       sink << fmt::format(
-          "rotrwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), 32 - sh);
+          "rotrwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n);
     } else {
+      uint8_t n = sh;
       sink << fmt::format(
-          "rotlwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), sh);
+          "rotlwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n);
     }
     return true;
   }
@@ -876,11 +890,14 @@ bool guess_rlwinm(const MetaInst& inst, std::ostream& sink) {
   // Best fits either a slwi or extlwi, so always disassemble it as that
   if (mb == 0) {
     if (sh + me == 31) {
+      uint8_t n = 31 - me;
       sink << fmt::format(
-          "slwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), sh);
+          "slwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n);
     } else {
+      uint8_t b = sh;
+      uint8_t n = me + 1;
       sink << fmt::format(
-          "extlwi{} {}, {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), me + 1, sh);
+          "extlwi{} {}, {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n, b);
     }
     return true;
   }
@@ -888,8 +905,9 @@ bool guess_rlwinm(const MetaInst& inst, std::ostream& sink) {
   // Bets fits either a srwi or extrwi, so always disassemble it as that
   if (me == 31) {
     if (sh + mb == 32) {
+      uint8_t n = mb;
       sink << fmt::format(
-          "srwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), mb);
+          "srwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n);
     } else {
       uint8_t n = 32 - mb;
       uint8_t b = sh - n;
@@ -899,7 +917,24 @@ bool guess_rlwinm(const MetaInst& inst, std::ostream& sink) {
     return true;
   }
 
-  // When SH and MB sum to 32, (but ME was not 31), it can be interpreted as inslwi
+  if (sh + me == 31) {
+    uint8_t n = sh;
+    uint8_t b = mb + n;
+    if (n <= b && b <= 31) {
+      sink << fmt::format(
+          "clrlslwi{} {}, {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n, b);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool guess_rlwimi(const MetaInst& inst, std::ostream& sink) {
+  uint8_t sh = inst._binst.sh()._val, mb = inst._binst.mb()._val, me = inst._binst.me()._val;
+  const char* flags_str = opcode_flags_string(inst._op, inst._binst);
+
+  // When SH and MB sum to 32, it can be interpreted as inslwi
   if (sh + mb == 32) {
     uint8_t b = mb;
     uint8_t n = me + 1 - b;
@@ -908,7 +943,7 @@ bool guess_rlwinm(const MetaInst& inst, std::ostream& sink) {
     return true;
   }
 
-  // There is no "easy" way to differentiate insrwi and clrlslwi i can think of
+  // When SH and ME sum to 31, it can be interpreted as insrwi
   if (sh + me == 31) {
     uint8_t b = mb;
     uint8_t n = me + 1 - b;
@@ -1023,6 +1058,9 @@ bool handle_pseudo_inst(const MetaInst& inst, std::ostream& sink, uint32_t sourc
 
     case InstOperation::kRlwinm:
       return guess_rlwinm(inst, sink);
+
+    case InstOperation::kRlwimi:
+      return guess_rlwimi(inst, sink);
 
     case InstOperation::kRlwnm:
       if (inst._binst.mb()._val == 0 && inst._binst.me()._val == 31) {
@@ -1464,7 +1502,7 @@ std::string immsource_verbose(ImmSource const& src) {
   return std::visit(overloaded{
                         [](SIMM simm) -> std::string { return fmt::format("signed {}", simm._imm_value); },
                         [](UIMM uimm) -> std::string { return fmt::format("unsigned {}", uimm._imm_value); },
-                        [](RelBranch br) -> std::string { return fmt::format("rel32 {:x}", br._rel_32); },
+                        [](RelBranch br) -> std::string { return fmt::format("rel32 {:#x}", br._rel_32); },
                         [](AuxImm aux) -> std::string { return fmt::format("aux {}", aux._val); },
                     },
       src);
@@ -1487,7 +1525,7 @@ void write_inst_info(MetaInst const& inst, std::ostream& sink) {
     }
   };
 
-  sink << fmt::format("Binst: {:08x}", inst._binst._bytes);
+  sink << fmt::format("Binst: {:x}", inst._binst._bytes);
   sink << "\nOperand: " << opcode_name(inst._op);
   sink << "\nReads: ";
   print_list(inst._reads, datasource_verbose);
