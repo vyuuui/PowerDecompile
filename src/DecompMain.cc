@@ -9,9 +9,10 @@
 
 #include "BinaryContext.hh"
 #include "CodeWarriorABIConfiguration.hh"
+#include "PpcDisasm.hh"
 #include "RegisterBinding.hh"
 #include "SubroutineGraph.hh"
-#include "dbgutil/DisasmWrite.hh"
+#include "dbgutil/Disassembler.hh"
 #include "producers/DolData.hh"
 
 namespace {
@@ -20,6 +21,7 @@ using namespace decomp;
 int summarize_subroutine(char**);
 int dump_dotfile(char**);
 int print_sections(char**);
+int linear_dis(char**);
 
 struct CommandVerb {
   std::string_view name;
@@ -33,7 +35,7 @@ struct CommandVerb {
   }
 };
 
-std::array<CommandVerb, 3> sVerbs = {
+std::array<CommandVerb, 4> sVerbs = {
     CommandVerb{"summarize",
         "<dol-path> <subroutine-address>",
         "Print out a summary of the subroutine starting at a specified address",
@@ -45,6 +47,11 @@ std::array<CommandVerb, 3> sVerbs = {
         3,
         dump_dotfile},
     CommandVerb{"sections", "<dol-path>", "Print out a list of all sections from the specified DOL", 1, print_sections},
+    CommandVerb{"dis",
+        "<dol-path> <start-address> <length>",
+        "Prints a linear disassembly of <length> instructions starting at the specified address",
+        3,
+        linear_dis},
 };
 
 void print_usage(char const* progname) {
@@ -231,6 +238,39 @@ int print_sections(char** cmd_args) {
         ds._size);
     section_number++;
   }
+  return 0;
+}
+
+int linear_dis(char** cmd_args) {
+  uint32_t disassembly_start = strtoll(cmd_args[1], nullptr, 16);
+  int disassembly_len = strtoll(cmd_args[2], nullptr, 16);
+
+  BinaryContext ctx;
+  {
+    std::ifstream file_in(cmd_args[0], std::ios::binary);
+    if (!file_in.is_open()) {
+      std::cerr << fmt::format("Failed to open path {}\n", cmd_args[0]);
+      return 1;
+    }
+
+    ErrorOr<BinaryContext> result = create_from_stream(file_in, BinaryType::kDOL);
+    if (result.is_error()) {
+      std::cerr << fmt::format("Failed to open path {}, reason: {}\n", cmd_args[0], result.err());
+      return 1;
+    }
+
+    ctx = std::move(result.val());
+  }
+
+  std::cout << "ADDRESS         INST WORD       DISASSEMBLY\n";
+  for (int i = 0; i < disassembly_len; i++) {
+    uint32_t address = disassembly_start + i * 4;
+    MetaInst inst = ctx._ram->read_instruction(address);
+    std::cout << fmt::format("{:08x}        {:08x}        ", address, inst._binst._bytes);
+    write_inst_disassembly(inst, std::cout, address);
+    std::cout << "\n";
+  }
+
   return 0;
 }
 }  // namespace

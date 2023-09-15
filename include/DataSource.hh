@@ -185,6 +185,18 @@ enum class FPSCRBit : uint32_t {
 };
 GEN_FLAG_OPERATORS(FPSCRBit)
 
+enum class InstFlags : uint32_t {
+  kNone = 0b000000,
+  kAll = 0b111111,
+  kWritesRecord = 0b000001,
+  kWritesXER = 0b000010,
+  kWritesLR = 0b000100,
+  kAbsoluteAddr = 0b001000,
+  kPsLoadsOne = 0b010000,
+  kLongMode = 0b100000,
+};
+GEN_FLAG_OPERATORS(InstFlags)
+
 using DataSource = std::variant<GPR, FPR, CRBit, MemRegOff, MemRegReg, SPR, TBR, FPSCRBit>;
 using ImmSource = std::variant<SIMM, UIMM, RelBranch, AuxImm>;
 }  // namespace decomp

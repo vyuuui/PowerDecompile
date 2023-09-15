@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <optional>
 
+#include "BinInst.hh"
 #include "DataSource.hh"
 #include "FlagsEnum.hh"
 #include "utl/ReservedVector.hh"
@@ -236,23 +237,11 @@ enum class InstOperation {
   kInvalid,
 };
 
-enum class InstFlags : uint32_t {
-  kNone = 0b000000,
-  kAll = 0b111111,
-  kWritesRecord = 0b000001,
-  kWritesXER = 0b000010,
-  kWritesLR = 0b000100,
-  kAbsoluteAddr = 0b001000,
-  kPsLoadsOne = 0b010000,
-  kLongMode = 0b100000,
-};
-GEN_FLAG_OPERATORS(InstFlags)
-
 // BO (branch operation?) type, mapped from instruction encoding to mnemonic
 enum class BOType { kDnzf, kDzf, kF, kDnzt, kDzt, kT, kDnz, kDz, kAlways, kInvalid };
 
 struct MetaInst {
-  uint32_t _binst;
+  BinInst _binst;
   // All data sources being read
   reserved_vector<DataSource, 3> _reads;
   // Instruction immediates
