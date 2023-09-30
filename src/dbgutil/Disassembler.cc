@@ -5,6 +5,7 @@
 #include <ostream>
 
 #include "PpcDisasm.hh"
+#include "utl/VariantOverloaded.hh"
 
 namespace decomp {
 namespace {
@@ -791,10 +792,8 @@ void write_inst_operands(const MetaInst& inst, std::ostream& sink) {
   }
 }
 
-void write_rel_loc(uint32_t source, uint32_t off, std::ostream& sink) {
-  const uint32_t target = source + off;
-
-  sink << fmt::format("{:#x} // -> loc_{:08x}", off, target);
+void write_rel_loc(MetaInst const& inst, std::ostream& sink) {
+  sink << fmt::format("{:#x} // -> loc_{:08x}", inst._va, inst.branch_target());
 }
 
 bool write_bcx_pseudo(const MetaInst& inst, std::ostream& sink, char const* form) {
@@ -812,11 +811,11 @@ bool write_bcx_pseudo(const MetaInst& inst, std::ostream& sink, char const* form
 
     case BOType::kF:
       if (bi >= 4) {
-        sink << fmt::format("b{}{}{}", condition_string_inv(bi), form, flags_str);
-        return false;
-      } else {
         sink << fmt::format("b{}{}{} cr{}", condition_string_inv(bi), form, flags_str, bi / 4);
         return true;
+      } else {
+        sink << fmt::format("b{}{}{}", condition_string_inv(bi), form, flags_str);
+        return false;
       }
 
     case BOType::kDnzt:
@@ -829,11 +828,11 @@ bool write_bcx_pseudo(const MetaInst& inst, std::ostream& sink, char const* form
 
     case BOType::kT:
       if (bi >= 4) {
-        sink << fmt::format("b{}{}{}", condition_string(bi), form, flags_str);
-        return false;
-      } else {
         sink << fmt::format("b{}{}{} cr{}", condition_string(bi), form, flags_str, bi / 4);
         return true;
+      } else {
+        sink << fmt::format("b{}{}{}", condition_string(bi), form, flags_str);
+        return false;
       }
       break;
 
@@ -955,7 +954,7 @@ bool guess_rlwimi(const MetaInst& inst, std::ostream& sink) {
   return false;
 }
 
-bool handle_pseudo_inst(const MetaInst& inst, std::ostream& sink, uint32_t source_addr) {
+bool handle_pseudo_inst(const MetaInst& inst, std::ostream& sink) {
   switch (inst._op) {
     case InstOperation::kBc:
       if (write_bcx_pseudo(inst, sink, "")) {
@@ -963,7 +962,7 @@ bool handle_pseudo_inst(const MetaInst& inst, std::ostream& sink, uint32_t sourc
       } else {
         sink << " ";
       }
-      write_rel_loc(source_addr, inst._binst.bd()._rel_32, sink);
+      write_rel_loc(inst, sink);
       return true;
 
     case InstOperation::kBclr:
@@ -1076,8 +1075,8 @@ bool handle_pseudo_inst(const MetaInst& inst, std::ostream& sink, uint32_t sourc
 }
 }  // namespace
 
-void write_inst_disassembly(const MetaInst& inst, std::ostream& sink, uint32_t source_addr) {
-  if (handle_pseudo_inst(inst, sink, source_addr)) {
+void write_inst_disassembly(const MetaInst& inst, std::ostream& sink) {
+  if (handle_pseudo_inst(inst, sink)) {
     return;
   }
 
@@ -1437,7 +1436,7 @@ void write_inst_disassembly(const MetaInst& inst, std::ostream& sink, uint32_t s
       break;
 
     case InstOperation::kB:
-      write_rel_loc(source_addr, inst._binst.li()._rel_32, sink);
+      write_rel_loc(inst, sink);
       break;
 
     default:
@@ -1450,13 +1449,6 @@ void write_inst_disassembly(const MetaInst& inst, std::ostream& sink, uint32_t s
 /////////////////////
 
 namespace {
-template <class... Ts>
-struct overloaded : Ts... {
-  using Ts::operator()...;
-};
-template <class... Ts>
-overloaded(Ts...) -> overloaded<Ts...>;
-
 std::string spr_name(SPR spr) {
   switch (spr) {
     case SPR::kLr:
@@ -1483,8 +1475,8 @@ std::string tbr_name(TBR tbr) {
 
 std::string datasource_verbose(DataSource const& src) {
   return std::visit(
-      overloaded{[](GPR gpr) -> std::string { return fmt::format("r{}", static_cast<int>(gpr)); },
-          [](FPR fpr) -> std::string { return fmt::format("f{}", static_cast<int>(fpr)); },
+      overloaded{[](GPRSlice gpr) -> std::string { return fmt::format("r{}", static_cast<int>(gpr._reg)); },
+          [](FPRSlice fpr) -> std::string { return fmt::format("f{}", static_cast<int>(fpr._reg)); },
           [](CRBit bits) -> std::string { return fmt::format("cr<{:08x}>", static_cast<uint32_t>(bits)); },
           [](MemRegOff mem) -> std::string {
             return fmt::format("[r{} + {}]", static_cast<int>(mem._base), mem._offset);

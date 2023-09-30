@@ -37,10 +37,6 @@ CompiledPattern compile_pattern(std::string_view pattern) {
 std::optional<uint32_t> pattern_scan_linear(std::vector<uint8_t> const& raw_data, CompiledPattern const& cpat) {
   for (size_t i = 0; (i + cpat.size()) < raw_data.size(); i++) {
     bool found = true;
-    if (i == 0x386454) {
-      int x = 0;
-      (void)x;
-    }
     for (size_t j = 0; j < cpat.size(); j++) {
       if (!cpat[j]) {
         continue;

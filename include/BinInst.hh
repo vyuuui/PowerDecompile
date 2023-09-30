@@ -53,6 +53,26 @@ public:
   constexpr FPR frc() const { return static_cast<FPR>(ext_range(21, 25)); }
   constexpr FPR frd() const { return static_cast<FPR>(ext_range(6, 10)); }
   constexpr FPR frs() const { return static_cast<FPR>(ext_range(6, 10)); }
+  constexpr FPRSlice fra_s() const { return FPRSlice { fra(), DataType::kSingle }; }
+  constexpr FPRSlice frb_s() const { return FPRSlice { frb(), DataType::kSingle }; }
+  constexpr FPRSlice frc_s() const { return FPRSlice { frc(), DataType::kSingle }; }
+  constexpr FPRSlice frd_s() const { return FPRSlice { frd(), DataType::kSingle }; }
+  constexpr FPRSlice frs_s() const { return FPRSlice { frs(), DataType::kSingle }; }
+  constexpr FPRSlice fra_d() const { return FPRSlice { fra(), DataType::kDouble }; }
+  constexpr FPRSlice frb_d() const { return FPRSlice { frb(), DataType::kDouble }; }
+  constexpr FPRSlice frc_d() const { return FPRSlice { frc(), DataType::kDouble }; }
+  constexpr FPRSlice frd_d() const { return FPRSlice { frd(), DataType::kDouble }; }
+  constexpr FPRSlice frs_d() const { return FPRSlice { frs(), DataType::kDouble }; }
+  constexpr FPRSlice fra_p() const { return FPRSlice { fra(), DataType::kPackedSingle }; }
+  constexpr FPRSlice frb_p() const { return FPRSlice { frb(), DataType::kPackedSingle }; }
+  constexpr FPRSlice frc_p() const { return FPRSlice { frc(), DataType::kPackedSingle }; }
+  constexpr FPRSlice frd_p() const { return FPRSlice { frd(), DataType::kPackedSingle }; }
+  constexpr FPRSlice frs_p() const { return FPRSlice { frs(), DataType::kPackedSingle }; }
+  constexpr FPRSlice fra_v() const { return FPRSlice { fra(), DataType::kSingleOrDouble }; }
+  constexpr FPRSlice frb_v() const { return FPRSlice { frb(), DataType::kSingleOrDouble }; }
+  constexpr FPRSlice frc_v() const { return FPRSlice { frc(), DataType::kSingleOrDouble }; }
+  constexpr FPRSlice frd_v() const { return FPRSlice { frd(), DataType::kSingleOrDouble }; }
+  constexpr FPRSlice frs_v() const { return FPRSlice { frs(), DataType::kSingleOrDouble }; }
   // GQR control register
   constexpr AuxImm i17() const { return AuxImm{ext_range(17, 19)}; }
   constexpr AuxImm i22() const { return AuxImm{ext_range(22, 24)}; }
@@ -70,16 +90,28 @@ public:
   constexpr GPR rb() const { return static_cast<GPR>(ext_range(16, 20)); }
   constexpr GPR rd() const { return static_cast<GPR>(ext_range(6, 10)); }
   constexpr GPR rs() const { return static_cast<GPR>(ext_range(6, 10)); }
+  constexpr GPRSlice ra_b() const { return GPRSlice { ra(), DataType::kS1 }; }
+  constexpr GPRSlice rb_b() const { return GPRSlice { rb(), DataType::kS1 }; }
+  constexpr GPRSlice rd_b() const { return GPRSlice { rd(), DataType::kS1 }; }
+  constexpr GPRSlice rs_b() const { return GPRSlice { rs(), DataType::kS1 }; }
+  constexpr GPRSlice ra_h() const { return GPRSlice { ra(), DataType::kS2 }; }
+  constexpr GPRSlice rb_h() const { return GPRSlice { rb(), DataType::kS2 }; }
+  constexpr GPRSlice rd_h() const { return GPRSlice { rd(), DataType::kS2 }; }
+  constexpr GPRSlice rs_h() const { return GPRSlice { rs(), DataType::kS2 }; }
+  constexpr GPRSlice ra_w() const { return GPRSlice { ra(), DataType::kS4 }; }
+  constexpr GPRSlice rb_w() const { return GPRSlice { rb(), DataType::kS4 }; }
+  constexpr GPRSlice rd_w() const { return GPRSlice { rd(), DataType::kS4 }; }
+  constexpr GPRSlice rs_w() const { return GPRSlice { rs(), DataType::kS4 }; }
   // Shift for bitmask defined by MB and ME
   constexpr AuxImm sh() const { return AuxImm{ext_range(16, 20)}; }
   // Signed 16-bit immediate
-  constexpr SIMM simm() const { return SIMM{ext_range_signed(16, 31)}; }
+  constexpr SIMM simm() const { return SIMM{static_cast<int16_t>(ext_range_signed(16, 31))}; }
   // Segment register number
   constexpr AuxImm sr() const { return AuxImm{ext_range(12, 15)}; }
   // Trap operation for tw/twi
   constexpr AuxImm to() const { return AuxImm{ext_range(6, 10)}; }
   // Unsigned 16-bit immediate
-  constexpr UIMM uimm() const { return UIMM{ext_range(16, 31)}; }
+  constexpr UIMM uimm() const { return UIMM{static_cast<uint16_t>(ext_range(16, 31))}; }
 
   // Flag fields
   constexpr InstFlags oe() const { return ext_range(30, 30) ? InstFlags::kWritesXER : InstFlags::kNone; }
@@ -90,8 +122,8 @@ public:
   constexpr InstFlags l() const { return ext_range(10, 10) ? InstFlags::kLongMode : InstFlags::kNone; }
 
   // Partially completed fields
-  constexpr int32_t d16() const { return ext_range_signed(16, 31); }
-  constexpr int32_t d20() const { return ext_range_signed(20, 31); }
+  constexpr int16_t d16() const { return ext_range_signed(16, 31); }
+  constexpr int16_t d20() const { return ext_range_signed(20, 31); }
 
   // Misc fields
   constexpr uint32_t opcd() const { return ext_range(0, 5); }

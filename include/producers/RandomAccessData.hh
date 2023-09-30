@@ -19,7 +19,7 @@ public:
 
   MetaInst read_instruction(uint32_t vaddr) const {
     MetaInst ret;
-    disasm_single(read_word(vaddr), ret);
+    disasm_single(vaddr, read_word(vaddr), ret);
     return ret;
   }
 };

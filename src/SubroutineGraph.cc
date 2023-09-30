@@ -214,6 +214,7 @@ SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_st
   }
 
   // Fill out block data now that blocks have been fully defined
+  // TODO: Is there a way to not disassemble twice?
   dfs_forward(
       [&graph, &ram](BasicBlock* cur) {
         for (uint32_t addr = cur->block_start; addr < cur->block_end; addr += 4) {

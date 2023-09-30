@@ -165,7 +165,15 @@ int dump_dotfile(char** cmd_args) {
 
   dotfile_out << fmt::format("digraph sub_{:08x} {{\n  graph [splines=ortho]\n  {{\n", analysis_start);
   for (BasicBlock* block : graph.nodes_by_id) {
-    dotfile_out << fmt::format("    n{} [shape=\"box\" label=\"loc_{:08x}\"]\n", block->block_id, block->block_end);
+    dotfile_out << fmt::format("    n{} [fontname=\"Courier New\" shape=\"box\" label=\"loc_{:08x}\\l", block->block_id, block->block_start);
+    uint32_t i = 0;
+    for (auto& inst : block->instructions) {
+      dotfile_out << fmt::format("{:08x}  ", block->block_start + 4 * i);
+      write_inst_disassembly(inst, dotfile_out);
+      dotfile_out << "\\l";
+      i++;
+    }
+    dotfile_out << "\"]\n";
   }
   dotfile_out << "  }\n";
 
@@ -267,7 +275,7 @@ int linear_dis(char** cmd_args) {
     uint32_t address = disassembly_start + i * 4;
     MetaInst inst = ctx._ram->read_instruction(address);
     std::cout << fmt::format("{:08x}        {:08x}        ", address, inst._binst._bytes);
-    write_inst_disassembly(inst, std::cout, address);
+    write_inst_disassembly(inst, std::cout);
     std::cout << "\n";
   }
 

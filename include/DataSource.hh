@@ -6,7 +6,7 @@
 #include "FlagsEnum.hh"
 
 namespace decomp {
-enum class GPR {
+enum class GPR : uint8_t {
   kR0,
   kR1,
   kR2,
@@ -46,7 +46,7 @@ constexpr bool operator>=(GPR l, GPR r) { return static_cast<int>(l) >= static_c
 constexpr bool operator<(GPR l, GPR r) { return static_cast<int>(l) < static_cast<int>(r); }
 constexpr bool operator<=(GPR l, GPR r) { return static_cast<int>(l) <= static_cast<int>(r); }
 
-enum class FPR {
+enum class FPR : uint8_t {
   kF0,
   kF1,
   kF2,
@@ -111,22 +111,47 @@ enum class CRBit : uint32_t {
 };
 GEN_FLAG_OPERATORS(CRBit)
 
+enum class DataType : uint8_t {
+  kS1,
+  kS2,
+  kS4,
+  kSingle,
+  kDouble,
+  kPackedSingle,
+  kSingleOrDouble,
+  kUnknown,
+  kLast = kUnknown,
+};
+static_assert(static_cast<uint8_t>(DataType::kLast) <= 0b111);
+
+struct GPRSlice {
+  GPR _reg : 5;
+  DataType _type : 3;
+};
+
+struct FPRSlice {
+  FPR _reg : 5;
+  DataType _type : 3;
+};
+
 struct MemRegOff {
-  GPR _base;
-  int32_t _offset;
+  GPR _base : 5;
+  DataType _type : 3;
+  int16_t _offset;
 };
 
 struct MemRegReg {
-  GPR _base;
+  GPR _base : 5;
+  DataType _type : 3;
   GPR _offset;
 };
 
 struct SIMM {
-  int32_t _imm_value;
+  int16_t _imm_value;
 };
 
 struct UIMM {
-  uint32_t _imm_value;
+  uint16_t _imm_value;
 };
 
 struct RelBranch {
@@ -197,6 +222,10 @@ enum class InstFlags : uint32_t {
 };
 GEN_FLAG_OPERATORS(InstFlags)
 
-using DataSource = std::variant<GPR, FPR, CRBit, MemRegOff, MemRegReg, SPR, TBR, FPSCRBit>;
+using DataSource = std::variant<GPRSlice, FPRSlice, CRBit, MemRegOff, MemRegReg, SPR, TBR, FPSCRBit>;
 using ImmSource = std::variant<SIMM, UIMM, RelBranch, AuxImm>;
+
+constexpr bool is_memory_ref(DataSource const& ds) {
+  return std::holds_alternative<MemRegOff>(ds) || std::holds_alternative<MemRegReg>(ds);
+}
 }  // namespace decomp

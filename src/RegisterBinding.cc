@@ -28,25 +28,8 @@ namespace decomp {
 //   -> propagate "possible usages" alongside real usages
 //   -> if a possible return val is used in an output block, transform it from retval to passthrough
 
-template <GPR... gprs>
-constexpr RegSet<GPR> gpr_mask_literal() {
-  return RegSet<GPR>{(0 | ... | (1 << static_cast<uint8_t>(gprs)))};
-}
-template <FPR... gprs>
-constexpr RegSet<FPR> fpr_mask_literal() {
-  return RegSet<FPR>{(0 | ... | (1 << static_cast<uint8_t>(gprs)))};
-}
-template <typename... Ts>
-constexpr RegSet<GPR> gpr_mask(Ts... args) {
-  return RegSet<GPR>{(0 | ... | static_cast<uint32_t>(1 << static_cast<uint8_t>(args)))};
-}
-template <typename... Ts>
-constexpr RegSet<FPR> fpr_mask(Ts... args) {
-  return RegSet<FPR>{(0 | ... | static_cast<uint32_t>(1 << static_cast<uint8_t>(args)))};
-}
-
-constexpr RegSet<GPR> kReturnSet = gpr_mask_literal<GPR::kR3, GPR::kR4>();
-constexpr RegSet<GPR> kCallerSavedGpr = gpr_mask_literal<GPR::kR0,
+constexpr GprSet kReturnSet = gpr_mask_literal<GPR::kR3, GPR::kR4>();
+constexpr GprSet kCallerSavedGpr = gpr_mask_literal<GPR::kR0,
     GPR::kR3,
     GPR::kR4,
     GPR::kR5,
@@ -57,7 +40,7 @@ constexpr RegSet<GPR> kCallerSavedGpr = gpr_mask_literal<GPR::kR0,
     GPR::kR10,
     GPR::kR11,
     GPR::kR12>();
-// constexpr RegSet<FPR> kCallerSavedFpr = fpr_mask_literal<FPR::kF0,
+// constexpr FprSet kCallerSavedFpr = fpr_mask_literal<FPR::kF0,
 //     FPR::kF1,
 //     FPR::kF2,
 //     FPR::kF3,
@@ -73,10 +56,6 @@ constexpr RegSet<GPR> kCallerSavedGpr = gpr_mask_literal<GPR::kR0,
 //     FPR::kF13>();
 
 namespace {
-uint32_t branch_target(MetaInst const& inst, uint32_t addr) {
-  return addr + std::get<RelBranch>(inst._immediates[0])._rel_32;
-}
-
 void process_block(BasicBlock* block, BinaryContext const& ctx) {
   RegisterLifetimes* bindings;
   if (block->extension_data == nullptr) {
@@ -84,13 +63,12 @@ void process_block(BasicBlock* block, BinaryContext const& ctx) {
     block->extension_data = bindings;
   }
 
-  RegSet<GPR> block_inputs;
-  RegSet<GPR> block_outputs;
-  RegSet<GPR> defined_mask;
+  GprSet block_inputs;
+  GprSet block_outputs;
+  GprSet defined_mask;
   std::optional<size_t> last_call_index;
 
   for (size_t i = 0; i < block->instructions.size(); i++) {
-    uint32_t addr = block->block_start + static_cast<uint32_t>(i * 4);
     MetaInst const& inst = block->instructions[i];
 
     // Naming convention:
@@ -98,10 +76,10 @@ void process_block(BasicBlock* block, BinaryContext const& ctx) {
     // use: Register set accessed by this instruction
     // def: Register set modified by this instruction
     // kill: Register set killed with an unknown value by this instruction
-    RegSet<GPR> live_in;
-    RegSet<GPR> use;
-    RegSet<GPR> def;
-    RegSet<GPR> kill;
+    GprSet live_in;
+    GprSet use;
+    GprSet def;
+    GprSet kill;
 
     // Pre-fill live_in with previous instruction's live_out set
     if (!bindings->_live_out.empty()) {
@@ -111,7 +89,7 @@ void process_block(BasicBlock* block, BinaryContext const& ctx) {
     // TODO: floating point, control fields
     // Function calls => kill caller saves
     if (check_flags(inst._flags, InstFlags::kWritesLR)) {
-      if (inst._op == InstOperation::kB && !is_abi_routine(ctx, branch_target(inst, addr))) {
+      if (inst._op == InstOperation::kB && !is_abi_routine(ctx, inst.branch_target())) {
         kill += kCallerSavedGpr;
         last_call_index = i;
       } else if (inst._op == InstOperation::kBclr || inst._op == InstOperation::kBc ||
@@ -121,8 +99,8 @@ void process_block(BasicBlock* block, BinaryContext const& ctx) {
       }
     } else {
       for (DataSource const& read : inst._reads) {
-        if (std::holds_alternative<GPR>(read)) {
-          use += std::get<GPR>(read);
+        if (std::holds_alternative<GPRSlice>(read)) {
+          use += std::get<GPRSlice>(read)._reg;
         } else if (std::holds_alternative<MemRegReg>(read)) {
           use += gpr_mask(std::get<MemRegReg>(read)._base, std::get<MemRegReg>(read)._offset);
         } else if (std::holds_alternative<MemRegOff>(read)) {
@@ -130,8 +108,8 @@ void process_block(BasicBlock* block, BinaryContext const& ctx) {
         }
       }
       for (DataSource const& write : inst._writes) {
-        if (std::holds_alternative<GPR>(write)) {
-          def += std::get<GPR>(write);
+        if (std::holds_alternative<GPRSlice>(write)) {
+          def += std::get<GPRSlice>(write)._reg;
         } else if (std::holds_alternative<MemRegReg>(write)) {
           use += gpr_mask(std::get<MemRegReg>(write)._base, std::get<MemRegReg>(write)._offset);
         } else if (std::holds_alternative<MemRegOff>(write)) {
@@ -146,7 +124,7 @@ void process_block(BasicBlock* block, BinaryContext const& ctx) {
     //  1. The register referenced is a return register
     //  2. The register referenced is not live coming into this instruction
     //  3. There was a call prior to this instruction
-    RegSet<GPR> used_rets = use & kReturnSet;
+    GprSet used_rets = use & kReturnSet;
     if (last_call_index && !used_rets.empty() && (live_in & used_rets).empty()) {
       bindings->_def[*last_call_index] += used_rets;
       bindings->_kill[*last_call_index] -= used_rets;
@@ -178,14 +156,14 @@ void process_block(BasicBlock* block, BinaryContext const& ctx) {
 bool backpropagate_retvals(BasicBlock* block) {
   RegisterLifetimes* lifetimes = static_cast<RegisterLifetimes*>(block->extension_data);
 
-  RegSet<GPR> retval_outputs;
+  GprSet retval_outputs;
   for (auto&& [_, outgoing] : block->outgoing_edges) {
     retval_outputs += static_cast<RegisterLifetimes*>(outgoing->extension_data)->_input;
   }
   retval_outputs &= kReturnSet;
 
   // Any outputs that overlap with this block's untouched retvals should backpropagate
-  RegSet<GPR> confirmed_ret_usages = retval_outputs & lifetimes->_untouched_retval;
+  GprSet confirmed_ret_usages = retval_outputs & lifetimes->_untouched_retval;
 
   // There is nothing to backpropagate
   if (confirmed_ret_usages.empty()) {
@@ -207,8 +185,8 @@ bool backpropagate_retvals(BasicBlock* block) {
 bool propagate_block(BasicBlock* block) {
   RegisterLifetimes* lifetimes = static_cast<RegisterLifetimes*>(block->extension_data);
 
-  RegSet<GPR> passthrough_inputs;
-  RegSet<GPR> passthrough_retvals;
+  GprSet passthrough_inputs;
+  GprSet passthrough_retvals;
   for (auto&& [_, incoming] : block->incoming_edges) {
     passthrough_inputs += static_cast<RegisterLifetimes*>(incoming->extension_data)->_output;
     passthrough_retvals += static_cast<RegisterLifetimes*>(incoming->extension_data)->_untouched_retval;
