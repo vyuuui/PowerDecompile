@@ -15,7 +15,5 @@ struct Subroutine {
   SubroutineStack _stack;
   GprSet _gpr_param;
   FprSet _fpr_param;
-  // TODO: moveme
-  std::vector<StackVariable> _stack_params;
 };
 }  // namespace decomp

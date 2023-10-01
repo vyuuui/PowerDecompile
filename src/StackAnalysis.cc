@@ -34,18 +34,21 @@ TypeSet convert_data_type(DataType type) {
   }
 }
 
+std::vector<StackVariable>& region_for_offset(SubroutineStack& stack, int16_t offset) {
+  return offset > stack._stack_size + 4 ? stack._stack_params : stack._stack_vars;
+}
+
 void analyze_readwrite(MetaInst const& inst, SubroutineStack& out_stack, MemRegOff operand, ReferenceType reftype) {
   auto type = operand._type;
   reserved_vector<int16_t, 2> offsets;
-  offsets.push_back(operand._offset);
+  offsets.push_back(abs(operand._offset));
   if (operand._type == DataType::kPackedSingle) {
-    offsets.push_back(operand._offset + 4);
+    offsets.push_back(abs(operand._offset) + 4);
     type = DataType::kSingle;
   }
 
   for (int16_t offset : offsets) {
-    std::vector<StackVariable>& region =
-        offset > out_stack._stack_size ? out_stack._stack_params : out_stack._stack_vars;
+    std::vector<StackVariable>& region = region_for_offset(out_stack, offset);
     auto it = std::find_if(
         region.begin(), region.end(), [offset](StackVariable const& var) { return var._offset == offset; });
     if (it == region.end()) {
@@ -67,9 +70,8 @@ void analyze_sp_mem_write(MetaInst const& inst, SubroutineStack& out_stack) {
 
 void analyze_sp_mem_ref(MetaInst const& inst, SubroutineStack& out_stack) {
   if (inst._op == InstOperation::kAddi) {
-    int32_t offset = inst.get_imm_op<SIMM>()._imm_value;
-    std::vector<StackVariable>& region =
-        offset > out_stack._stack_size ? out_stack._stack_params : out_stack._stack_vars;
+    int16_t offset = inst.get_imm_op<SIMM>()._imm_value;
+    std::vector<StackVariable>& region = region_for_offset(out_stack, offset);
     auto it = std::find_if(
         region.begin(), region.end(), [offset](StackVariable const& var) { return var._offset == offset; });
     if (it == region.end()) {
@@ -89,7 +91,7 @@ void analyze_sp_modify(MetaInst const& inst, SubroutineStack& out_stack) {
   }
 }
 
-void analyze_block(BasicBlock* block, SubroutineStack& out_stack) {
+void analyze_block(BasicBlock const* block, SubroutineStack& out_stack) {
   enum SPReferenceType { Write, Read, Reference, SpModify };
   for (MetaInst const& inst : block->instructions) {
     // There can't be more than 3 references to a register in a single instruction
@@ -99,7 +101,7 @@ void analyze_block(BasicBlock* block, SubroutineStack& out_stack) {
       auto ref =
           std::visit(overloaded{
                          [](MemRegOff mem) { return mem._base == GPR::kR1 ? std::make_optional(Read) : std::nullopt; },
-                         [](GPR reg) { return reg == GPR::kR1 ? std::make_optional(Reference) : std::nullopt; },
+                         [](GPRSlice r) { return r._reg == GPR::kR1 ? std::make_optional(Reference) : std::nullopt; },
                          [](auto) { return std::optional<SPReferenceType>{std::nullopt}; },
                      },
               read);
@@ -112,7 +114,7 @@ void analyze_block(BasicBlock* block, SubroutineStack& out_stack) {
       auto ref =
           std::visit(overloaded{
                          [](MemRegOff mem) { return mem._base == GPR::kR1 ? std::make_optional(Write) : std::nullopt; },
-                         [](GPR reg) { return reg == GPR::kR1 ? std::make_optional(SpModify) : std::nullopt; },
+                         [](GPRSlice r) { return r._reg == GPR::kR1 ? std::make_optional(SpModify) : std::nullopt; },
                          [](auto) { return std::optional<SPReferenceType>{std::nullopt}; },
                      },
               write);
@@ -145,11 +147,9 @@ void analyze_block(BasicBlock* block, SubroutineStack& out_stack) {
 }
 }  // namespace
 
-void run_stack_analysis(SubroutineGraph& graph) {
-  SubroutineStack result;
-
-  dfs_forward([&result](BasicBlock* cur) { analyze_block(cur, result); },
-      [](BasicBlock*, BasicBlock*) { return true; },
+void run_stack_analysis(SubroutineGraph const& graph, SubroutineStack& stack_out) {
+  dfs_forward([&stack_out](BasicBlock const* cur) { analyze_block(cur, stack_out); },
+      [](BasicBlock const*, BasicBlock const*) { return true; },
       graph.root);
 }
 }  // namespace decomp

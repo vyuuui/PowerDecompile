@@ -46,5 +46,5 @@ struct SubroutineStack {
   uint16_t _stack_size;
 };
 
-void run_stack_analysis(SubroutineGraph& graph);
+void run_stack_analysis(SubroutineGraph const& graph, SubroutineStack& out_stack);
 }  // namespace decomp

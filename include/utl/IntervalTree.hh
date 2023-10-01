@@ -226,6 +226,20 @@ public:
     return true;
   }
 
+  dinterval_tree() : _root(nullptr) {}
+
+  dinterval_tree(dinterval_tree const&) = delete;
+  dinterval_tree(dinterval_tree&& rhs) : _root(rhs._root) {
+    rhs._root = nullptr;
+  }
+
+  dinterval_tree& operator=(dinterval_tree const&) = delete;
+  dinterval_tree& operator=(dinterval_tree&& rhs) {
+    _root = rhs._root;
+    rhs._root = nullptr;
+    return *this;
+  }
+
   ~dinterval_tree() {
     if (_root == nullptr) {
       return;

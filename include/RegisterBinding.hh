@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <variant>
 #include <vector>
 
@@ -33,6 +34,8 @@ struct RegisterLifetimes : public BlockPrivate {
   RegSet<GPR> _killed_at_entry;
   // Set of registers that could be the result of a return
   RegSet<GPR> _untouched_retval;
+  RegSet<GPR> _output_retval;
+  std::optional<size_t> _last_call_index;
   virtual ~RegisterLifetimes() {}
 };
 

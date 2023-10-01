@@ -276,7 +276,7 @@ struct MetaInst {
 
   template <typename T>
   T get_write_op() const {
-    for (auto& ds : _reads) {
+    for (auto& ds : _writes) {
       if (std::holds_alternative<T>(ds)) {
         return std::get<T>(ds);
       }

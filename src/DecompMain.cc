@@ -11,6 +11,7 @@
 #include "CodeWarriorABIConfiguration.hh"
 #include "PpcDisasm.hh"
 #include "RegisterBinding.hh"
+#include "Subroutine.hh"
 #include "SubroutineGraph.hh"
 #include "dbgutil/Disassembler.hh"
 #include "producers/DolData.hh"
@@ -83,13 +84,59 @@ int summarize_subroutine(char** cmd_args) {
 
     ctx = std::move(result.val());
   }
+  Subroutine subroutine;
 
-  SubroutineGraph graph = create_graph(*ctx._ram, analysis_start);
-  evaluate_bindings(graph, ctx);
+  subroutine._graph = create_graph(*ctx._ram, analysis_start);
+  evaluate_bindings(subroutine._graph, ctx);
+  run_stack_analysis(subroutine._graph, subroutine._stack);
+
+  constexpr auto types_list = [](TypeSet ts) {
+    reserved_vector<char const*, 5> types;
+    if (check_flags(ts, TypeSet::kByte)) {
+      types.push_back("Byte");
+    }
+    if (check_flags(ts, TypeSet::kHalfWord)) {
+      types.push_back("HalfWord");
+    }
+    if (check_flags(ts, TypeSet::kWord)) {
+      types.push_back("Word");
+    }
+    if (check_flags(ts, TypeSet::kSingle)) {
+      types.push_back("Single");
+    }
+    if (check_flags(ts, TypeSet::kDouble)) {
+      types.push_back("Double");
+    }
+    return types;
+  };
+  constexpr auto reftype_str = [](ReferenceType reftype) {
+    switch (reftype) {
+      case ReferenceType::kRead:
+        return "Read";
+      case ReferenceType::kWrite:
+        return "Write";
+      case ReferenceType::kAddress:
+        return "Address";
+      default:
+        return "";
+    }
+  };
+  std::cout << fmt::format("Stack information:\n  Stack size: 0x{:x}\n", subroutine._stack._stack_size);
+  for (StackVariable const& sv : subroutine._stack._stack_vars) {
+    auto sv_types = types_list(sv._types);
+    std::cout << fmt::format("    Variable offset 0x{:x} of type(s) ", sv._offset);
+    for (char const* type_str : sv_types) {
+      std::cout << type_str << " ";
+    }
+    std::cout << "\n";
+    for (StackReference const& sr : sv._refs) {
+      std::cout << fmt::format("      Referenced at 0x{:x} as a {}\n", sr._location, reftype_str(sr._reftype));
+    }
+  }
 
   std::vector<BasicBlock*> next;
   std::set<BasicBlock*> visited;
-  next.push_back(graph.root);
+  next.push_back(subroutine._graph.root);
   while (!next.empty()) {
     BasicBlock* cur = next.back();
     next.pop_back();
@@ -130,7 +177,7 @@ int summarize_subroutine(char** cmd_args) {
     }
   }
 
-  for (Loop const& loop : graph.loops) {
+  for (Loop const& loop : subroutine._graph.loops) {
     std::cout << fmt::format("Loop beginning at 0x{:08x} spanning blocks:\n", loop.loop_start->block_start);
 
     for (BasicBlock* block : loop.loop_contents) {
@@ -165,7 +212,8 @@ int dump_dotfile(char** cmd_args) {
 
   dotfile_out << fmt::format("digraph sub_{:08x} {{\n  graph [splines=ortho]\n  {{\n", analysis_start);
   for (BasicBlock* block : graph.nodes_by_id) {
-    dotfile_out << fmt::format("    n{} [fontname=\"Courier New\" shape=\"box\" label=\"loc_{:08x}\\l", block->block_id, block->block_start);
+    dotfile_out << fmt::format(
+        "    n{} [fontname=\"Courier New\" shape=\"box\" label=\"loc_{:08x}\\l", block->block_id, block->block_start);
     uint32_t i = 0;
     for (auto& inst : block->instructions) {
       dotfile_out << fmt::format("{:08x}  ", block->block_start + 4 * i);

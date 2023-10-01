@@ -66,7 +66,6 @@ void process_block(BasicBlock* block, BinaryContext const& ctx) {
   GprSet block_inputs;
   GprSet block_outputs;
   GprSet defined_mask;
-  std::optional<size_t> last_call_index;
 
   for (size_t i = 0; i < block->instructions.size(); i++) {
     MetaInst const& inst = block->instructions[i];
@@ -91,11 +90,13 @@ void process_block(BasicBlock* block, BinaryContext const& ctx) {
     if (check_flags(inst._flags, InstFlags::kWritesLR)) {
       if (inst._op == InstOperation::kB && !is_abi_routine(ctx, inst.branch_target())) {
         kill += kCallerSavedGpr;
-        last_call_index = i;
+        bindings->_last_call_index = i;
+        bindings->_output_retval = kCallerSavedGpr;
       } else if (inst._op == InstOperation::kBclr || inst._op == InstOperation::kBc ||
                  inst._op == InstOperation::kBcctr) {
         kill += kCallerSavedGpr;
-        last_call_index = i;
+        bindings->_last_call_index = i;
+        bindings->_output_retval = kCallerSavedGpr;
       }
     } else {
       for (DataSource const& read : inst._reads) {
@@ -125,10 +126,10 @@ void process_block(BasicBlock* block, BinaryContext const& ctx) {
     //  2. The register referenced is not live coming into this instruction
     //  3. There was a call prior to this instruction
     GprSet used_rets = use & kReturnSet;
-    if (last_call_index && !used_rets.empty() && (live_in & used_rets).empty()) {
-      bindings->_def[*last_call_index] += used_rets;
-      bindings->_kill[*last_call_index] -= used_rets;
-      for (size_t j = *last_call_index; j < i; j++) {
+    if (bindings->_last_call_index && !used_rets.empty() && (live_in & used_rets).empty()) {
+      bindings->_def[*bindings->_last_call_index] += used_rets;
+      bindings->_kill[*bindings->_last_call_index] -= used_rets;
+      for (size_t j = *bindings->_last_call_index; j < i; j++) {
         bindings->_live_out[j] += used_rets;
         bindings->_live_in[j + 1] = bindings->_live_out[j];
       }
@@ -139,7 +140,7 @@ void process_block(BasicBlock* block, BinaryContext const& ctx) {
     block_outputs = (block_outputs - kill + def + use);
 
     // Return values must be the result of a kill, excluding things defined and used
-    bindings->_untouched_retval += (kill - def - use) & kReturnSet;
+    bindings->_output_retval -= (def + use);
     bindings->_def.push_back(def);
     bindings->_use.push_back(use);
     bindings->_kill.push_back(kill);
@@ -163,23 +164,35 @@ bool backpropagate_retvals(BasicBlock* block) {
   retval_outputs &= kReturnSet;
 
   // Any outputs that overlap with this block's untouched retvals should backpropagate
-  GprSet confirmed_ret_usages = retval_outputs & lifetimes->_untouched_retval;
+  GprSet used_passthrough = retval_outputs & lifetimes->_untouched_retval;
+  GprSet used_output = retval_outputs & lifetimes->_output_retval;
 
   // There is nothing to backpropagate
-  if (confirmed_ret_usages.empty()) {
-    return false;
+  if (!used_passthrough.empty()) {
+    for (size_t i = 0; i < lifetimes->_live_in.size(); i++) {
+      lifetimes->_live_in[i] += used_passthrough;
+      lifetimes->_live_out[i] += used_passthrough;
+    }
+
+    lifetimes->_input += used_passthrough;
+    lifetimes->_output += used_passthrough;
+    lifetimes->_untouched_retval -= used_passthrough;
+
+    return true;
+  } else if (!used_output.empty()) {
+    const size_t call_idx = *lifetimes->_last_call_index;
+    lifetimes->_def[call_idx] += used_passthrough;
+    lifetimes->_live_out[call_idx] += used_passthrough;
+    for (size_t i = call_idx + 1; i < lifetimes->_live_in.size(); i++) {
+      lifetimes->_live_out[i] += used_passthrough;
+      lifetimes->_live_in[i] += used_passthrough;
+    }
+
+    lifetimes->_output += used_passthrough;
+    lifetimes->_output_retval -= used_passthrough;
+    return true;
   }
-
-  for (size_t i = 0; i < lifetimes->_live_in.size(); i++) {
-    lifetimes->_live_in[i] += confirmed_ret_usages;
-    lifetimes->_live_out[i] += confirmed_ret_usages;
-  }
-
-  lifetimes->_input += confirmed_ret_usages;
-  lifetimes->_output += confirmed_ret_usages;
-  lifetimes->_untouched_retval -= confirmed_ret_usages;
-
-  return true;
+  return false;
 }
 
 bool propagate_block(BasicBlock* block) {
@@ -189,7 +202,8 @@ bool propagate_block(BasicBlock* block) {
   GprSet passthrough_retvals;
   for (auto&& [_, incoming] : block->incoming_edges) {
     passthrough_inputs += static_cast<RegisterLifetimes*>(incoming->extension_data)->_output;
-    passthrough_retvals += static_cast<RegisterLifetimes*>(incoming->extension_data)->_untouched_retval;
+    passthrough_retvals += static_cast<RegisterLifetimes*>(incoming->extension_data)->_untouched_retval +
+                           static_cast<RegisterLifetimes*>(incoming->extension_data)->_output_retval;
   }
 
   // Kill any registers that are overwritten in this block, excluding any inputs
@@ -198,7 +212,7 @@ bool propagate_block(BasicBlock* block) {
   passthrough_inputs -= lifetimes->_killed_at_entry + lifetimes->_input;
   passthrough_retvals -= lifetimes->_input + lifetimes->_overwritten;
 
-  if (passthrough_inputs.empty() && lifetimes->_untouched_retval == passthrough_retvals) {
+  if (passthrough_inputs.empty() && (lifetimes->_untouched_retval & passthrough_retvals) == passthrough_retvals) {
     return backpropagate_retvals(block);
   }
 
