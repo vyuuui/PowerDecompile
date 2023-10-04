@@ -148,22 +148,22 @@ int summarize_subroutine(char** cmd_args) {
     std::cout << fmt::format("Block 0x{:08x} -- 0x{:08x}\n", cur->block_start, cur->block_end);
 
     RegisterLifetimes* bbp = static_cast<RegisterLifetimes*>(cur->extension_data);
-    std::cout << "\tInput regs: ";
+    std::cout << "  Input regs: ";
     for (uint32_t i = 0; i < 32; i++) {
       if (bbp->_input.in_set(static_cast<GPR>(i))) {
         std::cout << fmt::format("r{} ", i);
       }
     }
 
-    std::cout << "\n\tOutput regs: ";
+    std::cout << "\n  Output regs: ";
     for (uint32_t i = 0; i < 32; i++) {
       if (bbp->_output.in_set(static_cast<GPR>(i))) {
         std::cout << fmt::format("r{} ", i);
       }
     }
-    std::cout << "\n\tOverwritten regs: ";
+    std::cout << "\n  Overwritten regs: ";
     for (uint32_t i = 0; i < 32; i++) {
-      if (bbp->_overwritten.in_set(static_cast<GPR>(i))) {
+      if (bbp->_overwrite.in_set(static_cast<GPR>(i))) {
         std::cout << fmt::format("r{} ", i);
       }
     }

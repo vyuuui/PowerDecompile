@@ -121,6 +121,8 @@ std::unordered_set<BasicBlock*> dfs_backward(
       std::forward<Visit>(visitor), std::forward<Iterate>(iterator), start, std::forward<Annotation>(init_annot)...);
 }
 
+constexpr bool always_iterate(BasicBlock*, BasicBlock*) { return true; }
+
 SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_start);
 
 }  // namespace decomp

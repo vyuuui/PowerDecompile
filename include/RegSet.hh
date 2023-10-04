@@ -13,6 +13,7 @@ struct RegSet {
 
   constexpr bool in_set(T reg) const { return ((1 << static_cast<uint8_t>(reg)) & _set) != 0; }
   constexpr bool empty() const { return _set == 0; }
+  constexpr operator bool() const { return !empty(); }
   constexpr bool operator==(RegSet rhs) const { return _set == rhs._set; }
   constexpr bool operator!=(RegSet rhs) const { return _set != rhs._set; }
 
