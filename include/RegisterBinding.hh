@@ -11,11 +11,10 @@
 #include "SubroutineGraph.hh"
 
 namespace decomp {
-
 class RandomAccessData;
 struct SubroutineGraph;
 
-struct RegisterLifetimes : public BlockPrivate {
+struct RegisterLifetimes {
   // Per-instruction register liveness
   std::vector<GprSet> _def;
   std::vector<GprSet> _use;
@@ -30,10 +29,7 @@ struct RegisterLifetimes : public BlockPrivate {
   // Temporary usage fields
   GprSet _guess_out;
   GprSet _propagated;
-
-  virtual ~RegisterLifetimes() {}
 };
 
 void evaluate_bindings(SubroutineGraph& graph, BinaryContext const& ctx);
-
 }  // namespace decomp

@@ -33,17 +33,17 @@ constexpr GprSet kKilledByCall = kCallerSavedGpr - kReturnSet;
 namespace {
 void eval_bindings_local(BasicBlock* block, BinaryContext const& ctx) {
   RegisterLifetimes* rlt;
-  if (block->extension_data == nullptr) {
+  if (block->_block_lifetimes == nullptr) {
     rlt = new RegisterLifetimes();
-    block->extension_data = rlt;
+    block->_block_lifetimes = rlt;
   }
 
   GprSet inputs;
   GprSet outputs;
   GprSet def_mask;
 
-  for (size_t i = 0; i < block->instructions.size(); i++) {
-    MetaInst const& inst = block->instructions[i];
+  for (size_t i = 0; i < block->_instructions.size(); i++) {
+    MetaInst const& inst = block->_instructions[i];
 
     // Naming convention:
     // live_in: Registers live coming into this instruction
@@ -111,11 +111,11 @@ void eval_bindings_local(BasicBlock* block, BinaryContext const& ctx) {
 }
 
 bool backpropagate_outputs(BasicBlock* block) {
-  RegisterLifetimes* rlt = static_cast<RegisterLifetimes*>(block->extension_data);
+  RegisterLifetimes* rlt = block->_block_lifetimes;
 
   GprSet outedge_inputs;
-  for (auto&& [_, outgoing] : block->outgoing_edges) {
-    outedge_inputs += static_cast<RegisterLifetimes*>(outgoing->extension_data)->_input;
+  for (auto&& [_, outgoing] : block->_outgoing_edges) {
+    outedge_inputs += outgoing->_block_lifetimes->_input;
   }
 
   GprSet used_out = outedge_inputs & rlt->_guess_out;
@@ -129,7 +129,7 @@ bool backpropagate_outputs(BasicBlock* block) {
     rlt->_propagated -= used_pt;
     rlt->_output += used_pt;
     rlt->_input += used_pt;
-    for (size_t i = 0; i < block->instructions.size(); i++) {
+    for (size_t i = 0; i < block->_instructions.size(); i++) {
       rlt->_live_in[i] += used_pt;
       rlt->_live_out[i] += used_pt;
     }
@@ -140,12 +140,11 @@ bool backpropagate_outputs(BasicBlock* block) {
 }
 
 bool propagate_guesses(BasicBlock* block) {
-  RegisterLifetimes* rlt = static_cast<RegisterLifetimes*>(block->extension_data);
+  RegisterLifetimes* rlt = block->_block_lifetimes;
 
   GprSet passthrough_inputs;
-  for (auto&& [_, incoming] : block->incoming_edges) {
-    passthrough_inputs += static_cast<RegisterLifetimes*>(incoming->extension_data)->_guess_out +
-                          static_cast<RegisterLifetimes*>(incoming->extension_data)->_propagated;
+  for (auto&& [_, incoming] : block->_incoming_edges) {
+    passthrough_inputs += incoming->_block_lifetimes->_guess_out + incoming->_block_lifetimes->_propagated;
   }
 
   // Additional inputs should only include new (passthrough) registers
@@ -161,7 +160,7 @@ bool propagate_guesses(BasicBlock* block) {
 }
 
 void clear_unused_bindings(BasicBlock* block) {
-  RegisterLifetimes* rlt = static_cast<RegisterLifetimes*>(block->extension_data);
+  RegisterLifetimes* rlt = block->_block_lifetimes;
 
   // Sweep through the block to clear out liveness for unused sections, E.G.
   // D=Def U=Use .=Neither
@@ -169,7 +168,7 @@ void clear_unused_bindings(BasicBlock* block) {
   //                              |____________|
   //                              unused section
   GprSet unused_mask = rlt->_guess_out;
-  for (size_t i = block->instructions.size(); i > 0; i--) {
+  for (size_t i = block->_instructions.size(); i > 0; i--) {
     rlt->_live_out[i - 1] -= unused_mask;
     unused_mask = unused_mask + rlt->_def[i - 1] - rlt->_use[i - 1];
     rlt->_live_in[i - 1] -= unused_mask;
@@ -178,20 +177,20 @@ void clear_unused_bindings(BasicBlock* block) {
 }  // namespace
 
 void evaluate_bindings(SubroutineGraph& graph, BinaryContext const& ctx) {
-  dfs_forward([&ctx](BasicBlock* cur) { eval_bindings_local(cur, ctx); }, always_iterate, graph.root);
+  dfs_forward([&ctx](BasicBlock* cur) { eval_bindings_local(cur, ctx); }, always_iterate, graph._root);
 
   bool did_change;
   do {
     did_change = false;
-    dfs_forward([&did_change](BasicBlock* cur) { did_change |= propagate_guesses(cur); }, always_iterate, graph.root);
+    dfs_forward([&did_change](BasicBlock* cur) { did_change |= propagate_guesses(cur); }, always_iterate, graph._root);
   } while (did_change);
 
   do {
     did_change = false;
     dfs_forward(
-        [&did_change](BasicBlock* cur) { did_change |= backpropagate_outputs(cur); }, always_iterate, graph.root);
+        [&did_change](BasicBlock* cur) { did_change |= backpropagate_outputs(cur); }, always_iterate, graph._root);
   } while (did_change);
 
-  dfs_forward([](BasicBlock* cur) { clear_unused_bindings(cur); }, always_iterate, graph.root);
+  dfs_forward([](BasicBlock* cur) { clear_unused_bindings(cur); }, always_iterate, graph._root);
 }
 }  // namespace decomp

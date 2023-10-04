@@ -93,7 +93,7 @@ void analyze_sp_modify(MetaInst const& inst, SubroutineStack& out_stack) {
 
 void analyze_block(BasicBlock const* block, SubroutineStack& out_stack) {
   enum SPReferenceType { Write, Read, Reference, SpModify };
-  for (MetaInst const& inst : block->instructions) {
+  for (MetaInst const& inst : block->_instructions) {
     // There can't be more than 3 references to a register in a single instruction
     reserved_vector<SPReferenceType, 3> all_sp_refs;
 
@@ -148,8 +148,6 @@ void analyze_block(BasicBlock const* block, SubroutineStack& out_stack) {
 }  // namespace
 
 void run_stack_analysis(SubroutineGraph const& graph, SubroutineStack& stack_out) {
-  dfs_forward([&stack_out](BasicBlock const* cur) { analyze_block(cur, stack_out); },
-      [](BasicBlock const*, BasicBlock const*) { return true; },
-      graph.root);
+  dfs_forward([&stack_out](BasicBlock const* cur) { analyze_block(cur, stack_out); }, always_iterate, graph._root);
 }
 }  // namespace decomp

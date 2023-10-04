@@ -793,7 +793,7 @@ void write_inst_operands(const MetaInst& inst, std::ostream& sink) {
 }
 
 void write_rel_loc(MetaInst const& inst, std::ostream& sink) {
-  sink << fmt::format("{:#x} // -> loc_{:08x}", inst._va, inst.branch_target());
+  sink << fmt::format("{:#x} // -> loc_{:08x}", std::get<RelBranch>(inst._immediates[0])._rel_32, inst.branch_target());
 }
 
 bool write_bcx_pseudo(const MetaInst& inst, std::ostream& sink, char const* form) {

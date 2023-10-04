@@ -59,7 +59,7 @@ void print_usage(char const* progname) {
   std::cerr << fmt::format("Expected usage\n  {} <command> ...\nSupported commands:\n", progname);
 
   for (size_t i = 0; i < sVerbs.size(); i++) {
-    std::cerr << fmt::format("  {}\t{}\n", sVerbs[i].name, sVerbs[i].short_desc);
+    std::cerr << fmt::format("  {}  {}\n", sVerbs[i].name, sVerbs[i].short_desc);
   }
 }
 
@@ -136,7 +136,7 @@ int summarize_subroutine(char** cmd_args) {
 
   std::vector<BasicBlock*> next;
   std::set<BasicBlock*> visited;
-  next.push_back(subroutine._graph.root);
+  next.push_back(subroutine._graph._root);
   while (!next.empty()) {
     BasicBlock* cur = next.back();
     next.pop_back();
@@ -145,9 +145,9 @@ int summarize_subroutine(char** cmd_args) {
     }
 
     visited.emplace(cur);
-    std::cout << fmt::format("Block 0x{:08x} -- 0x{:08x}\n", cur->block_start, cur->block_end);
+    std::cout << fmt::format("Block 0x{:08x} -- 0x{:08x}\n", cur->_block_start, cur->_block_end);
 
-    RegisterLifetimes* bbp = static_cast<RegisterLifetimes*>(cur->extension_data);
+    RegisterLifetimes* bbp = cur->_block_lifetimes;
     std::cout << "  Input regs: ";
     for (uint32_t i = 0; i < 32; i++) {
       if (bbp->_input.in_set(static_cast<GPR>(i))) {
@@ -169,7 +169,7 @@ int summarize_subroutine(char** cmd_args) {
     }
     std::cout << "\n";
 
-    for (auto& pair : cur->outgoing_edges) {
+    for (auto& pair : cur->_outgoing_edges) {
       BasicBlock* out = std::get<1>(pair);
       if (visited.count(out) == 0) {
         next.push_back(out);
@@ -177,11 +177,11 @@ int summarize_subroutine(char** cmd_args) {
     }
   }
 
-  for (Loop const& loop : subroutine._graph.loops) {
-    std::cout << fmt::format("Loop beginning at 0x{:08x} spanning blocks:\n", loop.loop_start->block_start);
+  for (Loop const& loop : subroutine._graph._loops) {
+    std::cout << fmt::format("Loop beginning at 0x{:08x} spanning blocks:\n", loop._start->_block_start);
 
-    for (BasicBlock* block : loop.loop_contents) {
-      std::cout << fmt::format("\tBlock 0x{:08x} -- 0x{:08x}\n", block->block_start, block->block_end);
+    for (BasicBlock* block : loop._contents) {
+      std::cout << fmt::format("  Block 0x{:08x} -- 0x{:08x}\n", block->_block_start, block->_block_end);
     }
   }
   return 0;
@@ -211,12 +211,12 @@ int dump_dotfile(char** cmd_args) {
   }
 
   dotfile_out << fmt::format("digraph sub_{:08x} {{\n  graph [splines=ortho]\n  {{\n", analysis_start);
-  for (BasicBlock* block : graph.nodes_by_id) {
+  for (BasicBlock* block : graph._nodes_by_id) {
     dotfile_out << fmt::format(
-        "    n{} [fontname=\"Courier New\" shape=\"box\" label=\"loc_{:08x}\\l", block->block_id, block->block_start);
+        "    n{} [fontname=\"Courier New\" shape=\"box\" label=\"loc_{:08x}\\l", block->_block_id, block->_block_start);
     uint32_t i = 0;
-    for (auto& inst : block->instructions) {
-      dotfile_out << fmt::format("{:08x}  ", block->block_start + 4 * i);
+    for (auto& inst : block->_instructions) {
+      dotfile_out << fmt::format("{:08x}  ", block->_block_start + 4 * i);
       write_inst_disassembly(inst, dotfile_out);
       dotfile_out << "\\l";
       i++;
@@ -239,14 +239,14 @@ int dump_dotfile(char** cmd_args) {
     }
   };
 
-  for (BasicBlock* block : graph.nodes_by_id) {
-    if (block->outgoing_edges.empty()) {
+  for (BasicBlock* block : graph._nodes_by_id) {
+    if (block->_outgoing_edges.empty()) {
       continue;
     }
 
-    for (auto&& [edge_type, next] : block->outgoing_edges) {
+    for (auto&& [edge_type, next] : block->_outgoing_edges) {
       dotfile_out << fmt::format(
-          "  n{} -> n{} [color=\"{}\"]\n", block->block_id, next->block_id, color_for_type(edge_type));
+          "  n{} -> n{} [color=\"{}\"]\n", block->_block_id, next->_block_id, color_for_type(edge_type));
     }
   }
 

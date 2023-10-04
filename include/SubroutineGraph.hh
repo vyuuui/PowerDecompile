@@ -10,6 +10,7 @@
 
 namespace decomp {
 class RandomAccessData;
+struct RegisterLifetimes;
 
 enum class IncomingEdgeType {
   kForwardEdge,
@@ -23,42 +24,38 @@ enum class OutgoingEdgeType {
   kFallthrough,
 };
 
-struct BlockPrivate {
-  virtual ~BlockPrivate() {}
-};
-
 struct BasicBlock {
   // Inclusive start address
-  uint32_t block_start;
+  uint32_t _block_start;
   // Exclusive end address
-  uint32_t block_end;
-  uint32_t block_id;
+  uint32_t _block_end;
+  uint32_t _block_id;
 
-  std::vector<std::tuple<IncomingEdgeType, BasicBlock*>> incoming_edges;
-  std::vector<std::tuple<OutgoingEdgeType, BasicBlock*>> outgoing_edges;
+  std::vector<std::tuple<IncomingEdgeType, BasicBlock*>> _incoming_edges;
+  std::vector<std::tuple<OutgoingEdgeType, BasicBlock*>> _outgoing_edges;
 
-  std::vector<MetaInst> instructions;
+  std::vector<MetaInst> _instructions;
 
-  BlockPrivate* extension_data = nullptr;
+  RegisterLifetimes* _block_lifetimes;
 };
 
 struct Loop {
-  BasicBlock* loop_start;
-  std::unordered_set<BasicBlock*> loop_contents;
-  std::vector<BasicBlock*> loop_exits;
+  BasicBlock* _start;
+  std::unordered_set<BasicBlock*> _contents;
+  std::vector<BasicBlock*> _exits;
 
-  Loop(BasicBlock* start) : loop_start(start), loop_exits() {}
+  Loop(BasicBlock* start) : _start(start), _exits() {}
 };
 
 struct SubroutineGraph {
-  BasicBlock* root;
-  std::vector<BasicBlock*> nodes_by_id;
-  dinterval_tree<BasicBlock*, uint32_t> nodes_by_range;
-  std::vector<BasicBlock*> exit_points;
-  std::vector<Loop> loops;
+  BasicBlock* _root;
+  std::vector<BasicBlock*> _nodes_by_id;
+  dinterval_tree<BasicBlock*, uint32_t> _nodes_by_range;
+  std::vector<BasicBlock*> _exit_points;
+  std::vector<Loop> _loops;
 
   BasicBlock const* block_by_vaddr(uint32_t vaddr) const {
-    auto result = nodes_by_range.query(vaddr, vaddr + 4);
+    auto result = _nodes_by_range.query(vaddr, vaddr + 4);
     return result == nullptr ? nullptr : *result;
   }
   BasicBlock* block_by_vaddr(uint32_t vaddr) {
@@ -70,7 +67,7 @@ template <bool Forward, typename Visit, typename Iterate, typename... Annotation
 std::unordered_set<BasicBlock*> dfs_traversal(
     Visit&& visitor, Iterate&& iterator, BasicBlock* start, Annotation... init_annot) {
   using EdgeListType =
-      std::conditional_t<Forward, decltype(BasicBlock::outgoing_edges), decltype(BasicBlock::incoming_edges)>;
+      std::conditional_t<Forward, decltype(BasicBlock::_outgoing_edges), decltype(BasicBlock::_incoming_edges)>;
 
   std::unordered_set<BasicBlock*> visited;
   std::vector<std::tuple<BasicBlock*, Annotation...>> process_stack;
@@ -88,9 +85,9 @@ std::unordered_set<BasicBlock*> dfs_traversal(
     std::apply(visitor, tup);
     EdgeListType* edge_list;
     if constexpr (Forward) {
-      edge_list = &std::get<0>(tup)->outgoing_edges;
+      edge_list = &std::get<0>(tup)->_outgoing_edges;
     } else {
-      edge_list = &std::get<0>(tup)->incoming_edges;
+      edge_list = &std::get<0>(tup)->_incoming_edges;
     }
 
     for (auto&& [_, next] : *edge_list) {
