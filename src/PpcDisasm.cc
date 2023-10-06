@@ -586,7 +586,7 @@ void disasm_opcode_31(BinInst binst, MetaInst& meta_out) {
       break;
     case 533:
       meta_out._op = InstOperation::kLswx;
-      meta_out._reads.push_back(MemRegReg{binst.ra(), DataType::kS4,binst.rb()});
+      meta_out._reads.push_back(MemRegReg{binst.ra(), DataType::kS4, binst.rb()});
       meta_out._writes.push_back(binst.rd_w());
       break;
     case 534:

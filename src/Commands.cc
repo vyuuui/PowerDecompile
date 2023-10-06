@@ -166,7 +166,7 @@ int dump_dotfile(CommandParamList const& cpl) {
   dotfile_out << fmt::format("digraph sub_{:08x} {{\n  graph [splines=ortho]\n  {{\n", analysis_start);
   for (BasicBlock* block : graph._nodes_by_id) {
     dotfile_out << fmt::format(
-        "    n{} [fontname=\"Courier New\" shape=\"box\" label=\"loc_{:08x}\\l", block->_block_id, block->_block_start);
+      "    n{} [fontname=\"Courier New\" shape=\"box\" label=\"loc_{:08x}\\l", block->_block_id, block->_block_start);
     uint32_t i = 0;
     for (auto& inst : block->_instructions) {
       dotfile_out << fmt::format("{:08x}  ", block->_block_start + 4 * i);
@@ -199,7 +199,7 @@ int dump_dotfile(CommandParamList const& cpl) {
 
     for (auto&& [edge_type, next] : block->_outgoing_edges) {
       dotfile_out << fmt::format(
-          "  n{} -> n{} [color=\"{}\"]\n", block->_block_id, next->_block_id, color_for_type(edge_type));
+        "  n{} -> n{} [color=\"{}\"]\n", block->_block_id, next->_block_id, color_for_type(edge_type));
     }
   }
 
@@ -229,11 +229,11 @@ int print_sections(CommandParamList const& cpl) {
   for (DolSection const& ts : dol_data.text_section_headers()) {
     std::cout << std::setw(15) << std::left << fmt::format(".text{}", section_number);
     std::cout << fmt::format("{:08x}       {:08x}       {:08x}       {:08x}       {:08x}\n",
-        ts._vaddr,
-        ts._vaddr + ts._size,
-        ts._file_off,
-        ts._file_off + ts._size,
-        ts._size);
+      ts._vaddr,
+      ts._vaddr + ts._size,
+      ts._file_off,
+      ts._file_off + ts._size,
+      ts._size);
     section_number++;
   }
 
@@ -241,11 +241,11 @@ int print_sections(CommandParamList const& cpl) {
   for (DolSection const& ds : dol_data.data_section_headers()) {
     std::cout << std::setw(15) << std::left << fmt::format(".data{}", section_number);
     std::cout << fmt::format("{:08x}       {:08x}       {:08x}       {:08x}       {:08x}\n",
-        ds._vaddr,
-        ds._vaddr + ds._size,
-        ds._file_off,
-        ds._file_off + ds._size,
-        ds._size);
+      ds._vaddr,
+      ds._vaddr + ds._size,
+      ds._file_off,
+      ds._file_off + ds._size,
+      ds._size);
     section_number++;
   }
   return 0;

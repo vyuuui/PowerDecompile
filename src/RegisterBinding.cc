@@ -16,18 +16,18 @@
 namespace decomp {
 constexpr GprSet kReturnSet = gpr_mask_literal<GPR::kR3, GPR::kR4>();
 constexpr GprSet kParameterSet =
-    gpr_mask_literal<GPR::kR3, GPR::kR4, GPR::kR5, GPR::kR6, GPR::kR7, GPR::kR8, GPR::kR9, GPR::kR10>();
+  gpr_mask_literal<GPR::kR3, GPR::kR4, GPR::kR5, GPR::kR6, GPR::kR7, GPR::kR8, GPR::kR9, GPR::kR10>();
 constexpr GprSet kCallerSavedGpr = gpr_mask_literal<GPR::kR0,
-    GPR::kR3,
-    GPR::kR4,
-    GPR::kR5,
-    GPR::kR6,
-    GPR::kR7,
-    GPR::kR8,
-    GPR::kR9,
-    GPR::kR10,
-    GPR::kR11,
-    GPR::kR12>();
+  GPR::kR3,
+  GPR::kR4,
+  GPR::kR5,
+  GPR::kR6,
+  GPR::kR7,
+  GPR::kR8,
+  GPR::kR9,
+  GPR::kR10,
+  GPR::kR11,
+  GPR::kR12>();
 constexpr GprSet kKilledByCall = kCallerSavedGpr - kReturnSet;
 
 namespace {
@@ -188,7 +188,7 @@ void evaluate_bindings(SubroutineGraph& graph, BinaryContext const& ctx) {
   do {
     did_change = false;
     dfs_forward(
-        [&did_change](BasicBlock* cur) { did_change |= backpropagate_outputs(cur); }, always_iterate, graph._root);
+      [&did_change](BasicBlock* cur) { did_change |= backpropagate_outputs(cur); }, always_iterate, graph._root);
   } while (did_change);
 
   dfs_forward([](BasicBlock* cur) { clear_unused_bindings(cur); }, always_iterate, graph._root);

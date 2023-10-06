@@ -18,19 +18,37 @@ struct RegSet {
   constexpr bool operator!=(RegSet rhs) const { return _set != rhs._set; }
 
   // Add register to set
-  constexpr RegSet& operator+=(T reg) { _set |= 1 << static_cast<uint8_t>(reg); return *this; }
+  constexpr RegSet& operator+=(T reg) {
+    _set |= 1 << static_cast<uint8_t>(reg);
+    return *this;
+  }
   // Set union
-  constexpr RegSet& operator+=(RegSet s) { _set |= s._set; return *this; }
+  constexpr RegSet& operator+=(RegSet s) {
+    _set |= s._set;
+    return *this;
+  }
 
   // Remove register from set
-  constexpr RegSet& operator-=(T reg) { _set &= ~(1 << static_cast<uint8_t>(reg)); return *this; }
+  constexpr RegSet& operator-=(T reg) {
+    _set &= ~(1 << static_cast<uint8_t>(reg));
+    return *this;
+  }
   // Set difference
-  constexpr RegSet& operator-=(RegSet s) { _set &= ~s._set; return *this; }
+  constexpr RegSet& operator-=(RegSet s) {
+    _set &= ~s._set;
+    return *this;
+  }
 
   // Set intersection
-  constexpr RegSet& operator&=(RegSet s) { _set &= s._set; return *this; }
+  constexpr RegSet& operator&=(RegSet s) {
+    _set &= s._set;
+    return *this;
+  }
   // Set uniq
-  constexpr RegSet& operator^=(RegSet rhs) { _set ^= rhs._set; return *this; }
+  constexpr RegSet& operator^=(RegSet rhs) {
+    _set ^= rhs._set;
+    return *this;
+  }
 
   // Set union
   constexpr RegSet operator+(RegSet rhs) const { return _set | rhs._set; }

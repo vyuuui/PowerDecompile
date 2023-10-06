@@ -15,7 +15,7 @@ namespace decomp {
 namespace {
 void print_usage(char const* progname, std::vector<LaunchCommand> const& cmd_list) {
   std::cerr << fmt::format(
-      "Expected usage\n    {} command [parameters...] [--options...]\nSupported commands:\n", progname);
+    "Expected usage\n    {} command [parameters...] [--options...]\nSupported commands:\n", progname);
 
   size_t longest_name = std::max_element(cmd_list.begin(), cmd_list.end(), [](auto const& l, auto const& r) {
     return l._name.length() < r._name.length();
@@ -70,7 +70,7 @@ void print_cmd_help(char const* progname, LaunchCommand const& cmd, std::ostream
     sink << "Options:\n";
     for (OptionDesc const& desc : cmd._opts) {
       sink << fmt::format(
-          "    --{}, -{} ({})\n        {}\n", desc._opt, desc._shortopt, type_str(desc._type), desc._desc);
+        "    --{}, -{} ({})\n        {}\n", desc._opt, desc._shortopt, type_str(desc._type), desc._desc);
     }
   }
 }
@@ -101,7 +101,7 @@ OptionDesc const* LaunchCommand::find_opt(std::string_view opt) const {
 
 OptionDesc const* LaunchCommand::find_opt(char shortopt) const {
   auto it =
-      std::find_if(_opts.begin(), _opts.end(), [shortopt](OptionDesc const& od) { return od._shortopt == shortopt; });
+    std::find_if(_opts.begin(), _opts.end(), [shortopt](OptionDesc const& od) { return od._shortopt == shortopt; });
   return it == _opts.end() ? nullptr : &*it;
 }
 
@@ -180,8 +180,8 @@ std::optional<std::string> CommandParamList::parse_argv(char** argv) {
     Shortopt,
   } parse_mode = Header;
   ParseState st = {
-      ._curs = *argv,
-      ._cur_argv = argv,
+    ._curs = *argv,
+    ._cur_argv = argv,
   };
 
   for (ParamDesc const& param : _cmd._params) {
@@ -262,7 +262,7 @@ CmdParamVariant const& CommandParamList::param(size_t index) const {
 
 CmdParamVariant const& CommandParamList::option(std::string_view opt) const {
   auto parsed_it =
-      std::find_if(_parsed_opts.begin(), _parsed_opts.end(), [opt](auto const& po) { return opt == std::get<1>(po); });
+    std::find_if(_parsed_opts.begin(), _parsed_opts.end(), [opt](auto const& po) { return opt == std::get<1>(po); });
   if (parsed_it != _parsed_opts.end()) {
     return std::get<2>(*parsed_it);
   }
@@ -277,7 +277,7 @@ CmdParamVariant const& CommandParamList::option(std::string_view opt) const {
 
 CmdParamVariant const& CommandParamList::option(char shortopt) const {
   auto parsed_it = std::find_if(
-      _parsed_opts.begin(), _parsed_opts.end(), [shortopt](auto const& po) { return shortopt == std::get<0>(po); });
+    _parsed_opts.begin(), _parsed_opts.end(), [shortopt](auto const& po) { return shortopt == std::get<0>(po); });
   if (parsed_it != _parsed_opts.end()) {
     return std::get<2>(*parsed_it);
   }
@@ -320,9 +320,9 @@ int exec_command(std::vector<LaunchCommand> const& cmd_list, int argc, char** ar
         auto fail_reason = cpl.parse_argv(argv + 2);
         if (fail_reason) {
           std::cerr << fmt::format("Error: {}\nRun '{} {} --help' for more detailed information on command\n",
-              *fail_reason,
-              argv[0],
-              cmd._name);
+            *fail_reason,
+            argv[0],
+            cmd._name);
           return 1;
         }
 

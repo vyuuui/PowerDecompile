@@ -49,8 +49,8 @@ void analyze_readwrite(MetaInst const& inst, SubroutineStack& out_stack, MemRegO
 
   for (int16_t offset : offsets) {
     std::vector<StackVariable>& region = region_for_offset(out_stack, offset);
-    auto it = std::find_if(
-        region.begin(), region.end(), [offset](StackVariable const& var) { return var._offset == offset; });
+    auto it =
+      std::find_if(region.begin(), region.end(), [offset](StackVariable const& var) { return var._offset == offset; });
     if (it == region.end()) {
       region.emplace_back(StackReference(inst._va, reftype), offset, convert_data_type(type));
     } else {
@@ -72,8 +72,8 @@ void analyze_sp_mem_ref(MetaInst const& inst, SubroutineStack& out_stack) {
   if (inst._op == InstOperation::kAddi) {
     int16_t offset = inst.get_imm_op<SIMM>()._imm_value;
     std::vector<StackVariable>& region = region_for_offset(out_stack, offset);
-    auto it = std::find_if(
-        region.begin(), region.end(), [offset](StackVariable const& var) { return var._offset == offset; });
+    auto it =
+      std::find_if(region.begin(), region.end(), [offset](StackVariable const& var) { return var._offset == offset; });
     if (it == region.end()) {
       region.emplace_back(StackReference(inst._va, ReferenceType::kAddress), offset, TypeSet::kNone);
     } else {
@@ -99,12 +99,12 @@ void analyze_block(BasicBlock const* block, SubroutineStack& out_stack) {
 
     for (auto& read : inst._reads) {
       auto ref =
-          std::visit(overloaded{
-                         [](MemRegOff mem) { return mem._base == GPR::kR1 ? std::make_optional(Read) : std::nullopt; },
-                         [](GPRSlice r) { return r._reg == GPR::kR1 ? std::make_optional(Reference) : std::nullopt; },
-                         [](auto) { return std::optional<SPReferenceType>{std::nullopt}; },
-                     },
-              read);
+        std::visit(overloaded{
+                     [](MemRegOff mem) { return mem._base == GPR::kR1 ? std::make_optional(Read) : std::nullopt; },
+                     [](GPRSlice r) { return r._reg == GPR::kR1 ? std::make_optional(Reference) : std::nullopt; },
+                     [](auto) { return std::optional<SPReferenceType>{std::nullopt}; },
+                   },
+          read);
       if (ref) {
         all_sp_refs.emplace_back(*ref);
       }
@@ -112,12 +112,12 @@ void analyze_block(BasicBlock const* block, SubroutineStack& out_stack) {
 
     for (auto& write : inst._writes) {
       auto ref =
-          std::visit(overloaded{
-                         [](MemRegOff mem) { return mem._base == GPR::kR1 ? std::make_optional(Write) : std::nullopt; },
-                         [](GPRSlice r) { return r._reg == GPR::kR1 ? std::make_optional(SpModify) : std::nullopt; },
-                         [](auto) { return std::optional<SPReferenceType>{std::nullopt}; },
-                     },
-              write);
+        std::visit(overloaded{
+                     [](MemRegOff mem) { return mem._base == GPR::kR1 ? std::make_optional(Write) : std::nullopt; },
+                     [](GPRSlice r) { return r._reg == GPR::kR1 ? std::make_optional(SpModify) : std::nullopt; },
+                     [](auto) { return std::optional<SPReferenceType>{std::nullopt}; },
+                   },
+          write);
       if (ref) {
         all_sp_refs.emplace_back(*ref);
       }

@@ -65,9 +65,9 @@ struct SubroutineGraph {
 
 template <bool Forward, typename Visit, typename Iterate, typename... Annotation>
 std::unordered_set<BasicBlock*> dfs_traversal(
-    Visit&& visitor, Iterate&& iterator, BasicBlock* start, Annotation... init_annot) {
+  Visit&& visitor, Iterate&& iterator, BasicBlock* start, Annotation... init_annot) {
   using EdgeListType =
-      std::conditional_t<Forward, decltype(BasicBlock::_outgoing_edges), decltype(BasicBlock::_incoming_edges)>;
+    std::conditional_t<Forward, decltype(BasicBlock::_outgoing_edges), decltype(BasicBlock::_incoming_edges)>;
 
   std::unordered_set<BasicBlock*> visited;
   std::vector<std::tuple<BasicBlock*, Annotation...>> process_stack;
@@ -107,15 +107,15 @@ std::unordered_set<BasicBlock*> dfs_traversal(
 
 template <typename Visit, typename Iterate, typename... Annotation>
 std::unordered_set<BasicBlock*> dfs_forward(
-    Visit&& visitor, Iterate&& iterator, BasicBlock* start, Annotation... init_annot) {
+  Visit&& visitor, Iterate&& iterator, BasicBlock* start, Annotation... init_annot) {
   return dfs_traversal<true>(
-      std::forward<Visit>(visitor), std::forward<Iterate>(iterator), start, std::forward<Annotation>(init_annot)...);
+    std::forward<Visit>(visitor), std::forward<Iterate>(iterator), start, std::forward<Annotation>(init_annot)...);
 }
 template <typename Visit, typename Iterate, typename... Annotation>
 std::unordered_set<BasicBlock*> dfs_backward(
-    Visit&& visitor, Iterate&& iterator, BasicBlock* start, Annotation... init_annot) {
+  Visit&& visitor, Iterate&& iterator, BasicBlock* start, Annotation... init_annot) {
   return dfs_traversal<false>(
-      std::forward<Visit>(visitor), std::forward<Iterate>(iterator), start, std::forward<Annotation>(init_annot)...);
+    std::forward<Visit>(visitor), std::forward<Iterate>(iterator), start, std::forward<Annotation>(init_annot)...);
 }
 
 constexpr bool always_iterate(BasicBlock*, BasicBlock*) { return true; }

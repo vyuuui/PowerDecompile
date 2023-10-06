@@ -862,12 +862,12 @@ bool guess_rlwinm(const MetaInst& inst, std::ostream& sink) {
     if (mb == 0) {
       uint8_t n = 31 - me;
       sink << fmt::format(
-          "clrrwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n);
+        "clrrwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n);
       return true;
     } else if (me == 31) {
       uint8_t n = mb;
       sink << fmt::format(
-          "clrlwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n);
+        "clrlwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n);
       return true;
     }
   }
@@ -877,11 +877,11 @@ bool guess_rlwinm(const MetaInst& inst, std::ostream& sink) {
     if (sh >= 16) {
       uint8_t n = 32 - sh;
       sink << fmt::format(
-          "rotrwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n);
+        "rotrwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n);
     } else {
       uint8_t n = sh;
       sink << fmt::format(
-          "rotlwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n);
+        "rotlwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n);
     }
     return true;
   }
@@ -891,12 +891,12 @@ bool guess_rlwinm(const MetaInst& inst, std::ostream& sink) {
     if (sh + me == 31) {
       uint8_t n = 31 - me;
       sink << fmt::format(
-          "slwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n);
+        "slwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n);
     } else {
       uint8_t b = sh;
       uint8_t n = me + 1;
       sink << fmt::format(
-          "extlwi{} {}, {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n, b);
+        "extlwi{} {}, {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n, b);
     }
     return true;
   }
@@ -906,12 +906,12 @@ bool guess_rlwinm(const MetaInst& inst, std::ostream& sink) {
     if (sh + mb == 32) {
       uint8_t n = mb;
       sink << fmt::format(
-          "srwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n);
+        "srwi{} {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n);
     } else {
       uint8_t n = 32 - mb;
       uint8_t b = sh - n;
       sink << fmt::format(
-          "extrwi{} {}, {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n, b);
+        "extrwi{} {}, {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n, b);
     }
     return true;
   }
@@ -921,7 +921,7 @@ bool guess_rlwinm(const MetaInst& inst, std::ostream& sink) {
     uint8_t b = mb + n;
     if (n <= b && b <= 31) {
       sink << fmt::format(
-          "clrlslwi{} {}, {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n, b);
+        "clrlslwi{} {}, {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n, b);
       return true;
     }
   }
@@ -938,7 +938,7 @@ bool guess_rlwimi(const MetaInst& inst, std::ostream& sink) {
     uint8_t b = mb;
     uint8_t n = me + 1 - b;
     sink << fmt::format(
-        "inslwi{} {}, {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n, b);
+      "inslwi{} {}, {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n, b);
     return true;
   }
 
@@ -947,7 +947,7 @@ bool guess_rlwimi(const MetaInst& inst, std::ostream& sink) {
     uint8_t b = mb;
     uint8_t n = me + 1 - b;
     sink << fmt::format(
-        "insrwi{} {}, {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n, b);
+      "insrwi{} {}, {}, {}, {}", flags_str, disasm_reg(inst._binst.ra()), disasm_reg(inst._binst.rs()), n, b);
     return true;
   }
 
@@ -1475,29 +1475,27 @@ std::string tbr_name(TBR tbr) {
 
 std::string datasource_verbose(DataSource const& src) {
   return std::visit(
-      overloaded{[](GPRSlice gpr) -> std::string { return fmt::format("r{}", static_cast<int>(gpr._reg)); },
-          [](FPRSlice fpr) -> std::string { return fmt::format("f{}", static_cast<int>(fpr._reg)); },
-          [](CRBit bits) -> std::string { return fmt::format("cr<{:08x}>", static_cast<uint32_t>(bits)); },
-          [](MemRegOff mem) -> std::string {
-            return fmt::format("[r{} + {}]", static_cast<int>(mem._base), mem._offset);
-          },
-          [](MemRegReg mem) -> std::string {
-            return fmt::format("[r{} + r{}]", static_cast<int>(mem._base), static_cast<int>(mem._offset));
-          },
-          [](SPR spr) -> std::string { return spr_name(spr); },
-          [](TBR tbr) -> std::string { return tbr_name(tbr); },
-          [](FPSCRBit bits) -> std::string { return fmt::format("fpscr<{:08x}>", static_cast<uint32_t>(bits)); }},
-      src);
+    overloaded{[](GPRSlice gpr) -> std::string { return fmt::format("r{}", static_cast<int>(gpr._reg)); },
+      [](FPRSlice fpr) -> std::string { return fmt::format("f{}", static_cast<int>(fpr._reg)); },
+      [](CRBit bits) -> std::string { return fmt::format("cr<{:08x}>", static_cast<uint32_t>(bits)); },
+      [](MemRegOff mem) -> std::string { return fmt::format("[r{} + {}]", static_cast<int>(mem._base), mem._offset); },
+      [](MemRegReg mem) -> std::string {
+        return fmt::format("[r{} + r{}]", static_cast<int>(mem._base), static_cast<int>(mem._offset));
+      },
+      [](SPR spr) -> std::string { return spr_name(spr); },
+      [](TBR tbr) -> std::string { return tbr_name(tbr); },
+      [](FPSCRBit bits) -> std::string { return fmt::format("fpscr<{:08x}>", static_cast<uint32_t>(bits)); }},
+    src);
 }
 
 std::string immsource_verbose(ImmSource const& src) {
   return std::visit(overloaded{
-                        [](SIMM simm) -> std::string { return fmt::format("signed {}", simm._imm_value); },
-                        [](UIMM uimm) -> std::string { return fmt::format("unsigned {}", uimm._imm_value); },
-                        [](RelBranch br) -> std::string { return fmt::format("rel32 {:#x}", br._rel_32); },
-                        [](AuxImm aux) -> std::string { return fmt::format("aux {}", aux._val); },
+                      [](SIMM simm) -> std::string { return fmt::format("signed {}", simm._imm_value); },
+                      [](UIMM uimm) -> std::string { return fmt::format("unsigned {}", uimm._imm_value); },
+                      [](RelBranch br) -> std::string { return fmt::format("rel32 {:#x}", br._rel_32); },
+                      [](AuxImm aux) -> std::string { return fmt::format("aux {}", aux._val); },
                     },
-      src);
+    src);
 }
 }  // namespace
 

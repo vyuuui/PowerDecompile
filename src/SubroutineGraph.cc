@@ -24,27 +24,27 @@ void construct_loop(Loop& loop, cut_set const& cuts) {
   loop._contents.emplace(loop._start);
 
   dfs_forward(
-      // Visit
-      [&traversal_path, &loop](BasicBlock* cur, int prefix_depth) {
-        traversal_path.resize(prefix_depth);
-        traversal_path.push_back(cur);
+    // Visit
+    [&traversal_path, &loop](BasicBlock* cur, int prefix_depth) {
+      traversal_path.resize(prefix_depth);
+      traversal_path.push_back(cur);
 
-        for (auto&& [_, next] : cur->_outgoing_edges) {
-          if (loop._contents.count(next) > 0) {
-            loop._contents.insert(traversal_path.begin(), traversal_path.end());
-            break;
-          }
+      for (auto&& [_, next] : cur->_outgoing_edges) {
+        if (loop._contents.count(next) > 0) {
+          loop._contents.insert(traversal_path.begin(), traversal_path.end());
+          break;
         }
-      },
-      // Iterate
-      [&cuts](BasicBlock* next, BasicBlock* cur, int depth) -> std::optional<std::tuple<int>> {
-        if (cuts.count(std::pair<int, int>(cur->_block_id, next->_block_id)) > 0) {
-          return std::nullopt;
-        }
-        return std::tuple<int>(depth + 1);
-      },
-      loop._start,
-      0);
+      }
+    },
+    // Iterate
+    [&cuts](BasicBlock* next, BasicBlock* cur, int depth) -> std::optional<std::tuple<int>> {
+      if (cuts.count(std::pair<int, int>(cur->_block_id, next->_block_id)) > 0) {
+        return std::nullopt;
+      }
+      return std::tuple<int>(depth + 1);
+    },
+    loop._start,
+    0);
 
   for (BasicBlock* loop_block : loop._contents) {
     for (auto&& [_, node] : loop_block->_outgoing_edges) {
@@ -58,10 +58,10 @@ void construct_loop(Loop& loop, cut_set const& cuts) {
 // Returns the future set, ignoring cuts made on edges
 std::unordered_set<BasicBlock*> future_set_with_cuts(BasicBlock* node, cut_set const& cuts) {
   return dfs_forward([](BasicBlock*) {},
-      [&cuts](BasicBlock* next, BasicBlock* cur) {
-        return cuts.count(std::pair<int, int>(cur->_block_id, next->_block_id)) == 0;
-      },
-      node);
+    [&cuts](BasicBlock* next, BasicBlock* cur) {
+      return cuts.count(std::pair<int, int>(cur->_block_id, next->_block_id)) == 0;
+    },
+    node);
 }
 
 ////////////////////////////////
@@ -118,33 +118,33 @@ SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_st
   std::vector<BasicBlock*> block_stack;
 
   auto handle_branch =
-      [&known_blocks, &block_stack, &graph](
-          BasicBlock* cur_block, uint32_t target_addr, uint32_t inst_addr, OutgoingEdgeType branch_type) {
-        if (BasicBlock* known_block = at_block_head(known_blocks, target_addr); known_block != nullptr) {
-          // If we're branching into the start of another block, just link us.
-          known_block->_incoming_edges.push_back({IncomingEdgeType::kForwardEdge, cur_block});
-          cur_block->_outgoing_edges.push_back({branch_type, known_block});
-          return;
-        }
+    [&known_blocks, &block_stack, &graph](
+      BasicBlock* cur_block, uint32_t target_addr, uint32_t inst_addr, OutgoingEdgeType branch_type) {
+      if (BasicBlock* known_block = at_block_head(known_blocks, target_addr); known_block != nullptr) {
+        // If we're branching into the start of another block, just link us.
+        known_block->_incoming_edges.push_back({IncomingEdgeType::kForwardEdge, cur_block});
+        cur_block->_outgoing_edges.push_back({branch_type, known_block});
+        return;
+      }
 
-        BasicBlock* next_block = nullptr;
-        if (BasicBlock* known_block = contained_in_block(known_blocks, target_addr); known_block != nullptr) {
-          next_block = split_blocks(known_block, target_addr, graph);
-        } else {
-          next_block = new BasicBlock();
-          next_block->_block_start = target_addr;
-          next_block->_block_end = target_addr + 4;
-          next_block->_block_id = static_cast<uint32_t>(graph._nodes_by_id.size());
-          graph._nodes_by_id.push_back(next_block);
+      BasicBlock* next_block = nullptr;
+      if (BasicBlock* known_block = contained_in_block(known_blocks, target_addr); known_block != nullptr) {
+        next_block = split_blocks(known_block, target_addr, graph);
+      } else {
+        next_block = new BasicBlock();
+        next_block->_block_start = target_addr;
+        next_block->_block_end = target_addr + 4;
+        next_block->_block_id = static_cast<uint32_t>(graph._nodes_by_id.size());
+        graph._nodes_by_id.push_back(next_block);
 
-          block_stack.push_back(next_block);
-          known_blocks.push_back(next_block);
-        }
+        block_stack.push_back(next_block);
+        known_blocks.push_back(next_block);
+      }
 
-        next_block->_incoming_edges.push_back({IncomingEdgeType::kForwardEdge, cur_block});
-        cur_block->_outgoing_edges.push_back({branch_type, next_block});
-        cur_block->_block_end = inst_addr + 0x4;
-      };
+      next_block->_incoming_edges.push_back({IncomingEdgeType::kForwardEdge, cur_block});
+      cur_block->_outgoing_edges.push_back({branch_type, next_block});
+      cur_block->_block_end = inst_addr + 0x4;
+    };
 
   block_stack.push_back(start);
   known_blocks.push_back(start);
@@ -216,14 +216,14 @@ SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_st
   // Fill out block data now that blocks have been fully defined
   // TODO: Is there a way to not disassemble twice?
   dfs_forward(
-      [&graph, &ram](BasicBlock* cur) {
-        for (uint32_t addr = cur->_block_start; addr < cur->_block_end; addr += 4) {
-          cur->_instructions.emplace_back(ram.read_instruction(addr));
-        }
-        graph._nodes_by_range.try_emplace(cur->_block_start, cur->_block_end, cur);
-      },
-      always_iterate,
-      graph._root);
+    [&graph, &ram](BasicBlock* cur) {
+      for (uint32_t addr = cur->_block_start; addr < cur->_block_end; addr += 4) {
+        cur->_instructions.emplace_back(ram.read_instruction(addr));
+      }
+      graph._nodes_by_range.try_emplace(cur->_block_start, cur->_block_end, cur);
+    },
+    always_iterate,
+    graph._root);
 
   // Loop detection algorithm
   //   For each node in the graph
@@ -232,39 +232,39 @@ SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_st
   //   + Make cuts in the graph for each edge that is in the future set of this node
   cut_set cuts;
   dfs_forward(
-      // Visit
-      [&graph, &cuts](BasicBlock* cur) {
-        if (cur->_incoming_edges.empty()) {
-          return;
+    // Visit
+    [&graph, &cuts](BasicBlock* cur) {
+      if (cur->_incoming_edges.empty()) {
+        return;
+      }
+
+      std::unordered_set<BasicBlock*> future = future_set_with_cuts(cur, cuts);
+      bool incoming_in_future = false;
+      bool incoming_outside_loop = false;
+
+      for (auto&& [_, node] : cur->_incoming_edges) {
+        if (future.count(node) > 0) {
+          incoming_in_future = true;
+        } else {
+          incoming_outside_loop = true;
         }
+      }
 
-        std::unordered_set<BasicBlock*> future = future_set_with_cuts(cur, cuts);
-        bool incoming_in_future = false;
-        bool incoming_outside_loop = false;
-
-        for (auto&& [_, node] : cur->_incoming_edges) {
+      if (incoming_in_future && incoming_outside_loop) {
+        construct_loop(graph._loops.emplace_back(cur), cuts);
+        for (auto&& [edge_type, node] : cur->_incoming_edges) {
           if (future.count(node) > 0) {
-            incoming_in_future = true;
-          } else {
-            incoming_outside_loop = true;
+            // All edges that point back to the loop entry point are backedges
+            edge_type = IncomingEdgeType::kBackEdge;
+            // Cut all backedges to this newly created loop
+            cuts.emplace(node->_block_id, cur->_block_id);
           }
         }
-
-        if (incoming_in_future && incoming_outside_loop) {
-          construct_loop(graph._loops.emplace_back(cur), cuts);
-          for (auto&& [edge_type, node] : cur->_incoming_edges) {
-            if (future.count(node) > 0) {
-              // All edges that point back to the loop entry point are backedges
-              edge_type = IncomingEdgeType::kBackEdge;
-              // Cut all backedges to this newly created loop
-              cuts.emplace(node->_block_id, cur->_block_id);
-            }
-          }
-        }
-      },
-      // Iterate
-      always_iterate,
-      graph._root);
+      }
+    },
+    // Iterate
+    always_iterate,
+    graph._root);
 
   return graph;
 }

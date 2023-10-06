@@ -117,7 +117,7 @@ class dinterval_tree {
     interval_node* parent = new_node->_parent;
     while (parent != nullptr) {
       parent->_height = 1 + std::max(parent->_lp == nullptr ? 0 : parent->_lp->_height,
-                                parent->_rp == nullptr ? 0 : parent->_rp->_height);
+                              parent->_rp == nullptr ? 0 : parent->_rp->_height);
 
       int64_t bfac = parent->balance_factor();
       if (bfac > 1) {
@@ -229,9 +229,7 @@ public:
   dinterval_tree() : _root(nullptr) {}
 
   dinterval_tree(dinterval_tree const&) = delete;
-  dinterval_tree(dinterval_tree&& rhs) : _root(rhs._root) {
-    rhs._root = nullptr;
-  }
+  dinterval_tree(dinterval_tree&& rhs) : _root(rhs._root) { rhs._root = nullptr; }
 
   dinterval_tree& operator=(dinterval_tree const&) = delete;
   dinterval_tree& operator=(dinterval_tree&& rhs) {
