@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <variant>
 
-#include "FlagsEnum.hh"
+#include "utl/FlagsEnum.hh"
 
 namespace decomp {
 enum class GPR : uint8_t {

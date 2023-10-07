@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "DataSource.hh"
+#include "ppc/DataSource.hh"
 
 namespace decomp {
 struct SubroutineGraph;

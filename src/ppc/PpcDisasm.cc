@@ -1,11 +1,11 @@
-#include "PpcDisasm.hh"
+#include "ppc/PpcDisasm.hh"
 
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
 
-#include "BinInst.hh"
-#include "DataSource.hh"
+#include "ppc/BinInst.hh"
+#include "ppc/DataSource.hh"
 #include "utl/ReservedVector.hh"
 
 namespace decomp {

@@ -5,9 +5,9 @@
 #include <optional>
 #include <variant>
 
-#include "BinInst.hh"
-#include "DataSource.hh"
-#include "FlagsEnum.hh"
+#include "ppc/BinInst.hh"
+#include "ppc/DataSource.hh"
+#include "utl/FlagsEnum.hh"
 #include "utl/ReservedVector.hh"
 
 namespace decomp {

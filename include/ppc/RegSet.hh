@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "DataSource.hh"
+#include "ppc/DataSource.hh"
 
 namespace decomp {
 template <typename T>

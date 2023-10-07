@@ -1,4 +1,4 @@
-#include "RegisterBinding.hh"
+#include "ppc/RegisterBinding.hh"
 
 #include <algorithm>
 #include <iterator>
@@ -6,12 +6,12 @@
 #include <set>
 #include <variant>
 
-#include "BinaryContext.hh"
-#include "DataSource.hh"
-#include "FlagsEnum.hh"
-#include "PpcDisasm.hh"
-#include "SubroutineGraph.hh"
+#include "ppc/BinaryContext.hh"
+#include "ppc/DataSource.hh"
+#include "ppc/PpcDisasm.hh"
+#include "ppc/SubroutineGraph.hh"
 #include "producers/RandomAccessData.hh"
+#include "utl/FlagsEnum.hh"
 
 namespace decomp {
 constexpr GprSet kReturnSet = gpr_mask_literal<GPR::kR3, GPR::kR4>();

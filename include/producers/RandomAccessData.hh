@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "PpcDisasm.hh"
+#include "ppc/PpcDisasm.hh"
 
 namespace decomp {
 

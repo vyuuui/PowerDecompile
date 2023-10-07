@@ -7,10 +7,10 @@
 #include <iostream>
 #include <set>
 
-#include "BinaryContext.hh"
-#include "RegisterBinding.hh"
-#include "Subroutine.hh"
 #include "dbgutil/Disassembler.hh"
+#include "ppc/BinaryContext.hh"
+#include "ppc/RegisterBinding.hh"
+#include "ppc/Subroutine.hh"
 #include "producers/DolData.hh"
 #include "utl/LaunchCommand.hh"
 

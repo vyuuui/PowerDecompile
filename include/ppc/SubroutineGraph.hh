@@ -5,7 +5,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "PpcDisasm.hh"
+#include "ppc/PpcDisasm.hh"
 #include "utl/IntervalTree.hh"
 
 namespace decomp {

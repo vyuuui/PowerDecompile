@@ -1,12 +1,12 @@
-#include "StackAnalysis.hh"
+#include "ppc/StackAnalysis.hh"
 
 #include <algorithm>
 #include <optional>
 #include <variant>
 
-#include "DataSource.hh"
-#include "PpcDisasm.hh"
-#include "SubroutineGraph.hh"
+#include "ppc/DataSource.hh"
+#include "ppc/PpcDisasm.hh"
+#include "ppc/SubroutineGraph.hh"
 #include "utl/ReservedVector.hh"
 #include "utl/VariantOverloaded.hh"
 

@@ -2,9 +2,9 @@
 
 #include <cstdint>
 
-#include "RegSet.hh"
-#include "StackAnalysis.hh"
-#include "SubroutineGraph.hh"
+#include "ppc/RegSet.hh"
+#include "ppc/StackAnalysis.hh"
+#include "ppc/SubroutineGraph.hh"
 
 namespace decomp {
 // Encapsulation of all data pertaining to a subroutine

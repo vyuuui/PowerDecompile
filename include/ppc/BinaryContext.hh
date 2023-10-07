@@ -3,7 +3,7 @@
 #include <fstream>
 #include <memory>
 
-#include "CodeWarriorABIConfiguration.hh"
+#include "ppc/CodeWarriorABIConfiguration.hh"
 #include "producers/RandomAccessData.hh"
 #include "utl/ErrorOr.hh"
 

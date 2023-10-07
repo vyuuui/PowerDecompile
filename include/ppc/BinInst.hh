@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "DataSource.hh"
+#include "ppc/DataSource.hh"
 
 namespace decomp {
 constexpr uint32_t gen_mask(uint32_t left, uint32_t right) {

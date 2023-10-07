@@ -4,7 +4,7 @@
 
 #include <ostream>
 
-#include "PpcDisasm.hh"
+#include "ppc/PpcDisasm.hh"
 #include "utl/VariantOverloaded.hh"
 
 namespace decomp {

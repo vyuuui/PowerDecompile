@@ -5,10 +5,10 @@
 #include <variant>
 #include <vector>
 
-#include "BinaryContext.hh"
-#include "DataSource.hh"
-#include "RegSet.hh"
-#include "SubroutineGraph.hh"
+#include "ppc/BinaryContext.hh"
+#include "ppc/DataSource.hh"
+#include "ppc/RegSet.hh"
+#include "ppc/SubroutineGraph.hh"
 
 namespace decomp {
 class RandomAccessData;
