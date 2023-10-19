@@ -5,7 +5,7 @@
 
 #include "utl/FlagsEnum.hh"
 
-namespace decomp {
+namespace decomp::ppc {
 enum class GPR : uint8_t {
   kR0,
   kR1,
@@ -222,10 +222,14 @@ enum class InstFlags : uint32_t {
 };
 GEN_FLAG_OPERATORS(InstFlags)
 
-using DataSource = std::variant<GPRSlice, FPRSlice, CRBit, MemRegOff, MemRegReg, SPR, TBR, FPSCRBit>;
-using ImmSource = std::variant<SIMM, UIMM, RelBranch, AuxImm>;
+using ReadSource =
+  std::variant<GPRSlice, FPRSlice, CRBit, MemRegOff, MemRegReg, SPR, TBR, FPSCRBit, SIMM, UIMM, RelBranch, AuxImm>;
+using WriteSource = std::variant<GPRSlice, FPRSlice, CRBit, MemRegOff, MemRegReg, SPR, TBR, FPSCRBit>;
 
-constexpr bool is_memory_ref(DataSource const& ds) {
+constexpr bool is_memory_ref(ReadSource const& ds) {
   return std::holds_alternative<MemRegOff>(ds) || std::holds_alternative<MemRegReg>(ds);
 }
-}  // namespace decomp
+constexpr bool is_memory_ref(WriteSource const& ds) {
+  return std::holds_alternative<MemRegOff>(ds) || std::holds_alternative<MemRegReg>(ds);
+}
+}  // namespace decomp::ppc

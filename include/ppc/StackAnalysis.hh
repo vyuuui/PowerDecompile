@@ -5,7 +5,7 @@
 
 #include "ppc/DataSource.hh"
 
-namespace decomp {
+namespace decomp::ppc {
 struct SubroutineGraph;
 enum class TypeSet : uint8_t {
   kNone = 0,
@@ -47,4 +47,4 @@ struct SubroutineStack {
 };
 
 void run_stack_analysis(SubroutineGraph const& graph, SubroutineStack& out_stack);
-}  // namespace decomp
+}  // namespace decomp::ppc

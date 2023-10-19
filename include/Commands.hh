@@ -1,8 +1,9 @@
 #pragma once
 
-namespace decomp {
-class CommandParamList;
+#include "utl/LaunchCommand.hh"
 
+namespace decomp {
+int test_cmd(CommandParamList const&);
 int summarize_subroutine(CommandParamList const&);
 int dump_dotfile(CommandParamList const&);
 int print_sections(CommandParamList const&);

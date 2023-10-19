@@ -8,14 +8,42 @@
 #include <set>
 
 #include "dbgutil/Disassembler.hh"
+#include "ir/GekkoTranslator.hh"
 #include "ppc/BinaryContext.hh"
-#include "ppc/RegisterBinding.hh"
+#include "ppc/RegisterLiveness.hh"
 #include "ppc/Subroutine.hh"
 #include "producers/DolData.hh"
 #include "utl/LaunchCommand.hh"
 
 namespace decomp {
+int test_cmd(CommandParamList const& cpl) {
+  using namespace ppc;
+
+  BinaryContext ctx = create_raw(0,
+    0,
+    "\x94\x21\xFF\xF0\x93\xE1\x00\x0C\x3B\xE0\x00\x00\x2C\x03\x00\x03\x40\x82\x00\x0C\x3B\xE0\x00\x06\x48\x00\x00\x08"
+    "\x38\x60\x00\x03\x7C\x63\xFA\x14\x83\xE1\x00\x0C\x38\x21\x00\x10\x4E\x80\x00\x20");
+
+  Subroutine subroutine;
+  subroutine._graph = create_graph(*ctx._ram, 0);
+
+  evaluate_bindings(subroutine._graph, ctx);
+  run_stack_analysis(subroutine._graph, subroutine._stack);
+  ir::IrGraph irg = ir::translate_subroutine(subroutine);
+
+  for (size_t i = 0; i < irg._gpr_binds.ntemps(); i++) {
+    ir::BindInfo<GPR> const* bi = irg._gpr_binds.get_temp(i);
+    std::cout << fmt::format("Bind t{} on gpr r{} over range(s):", bi->_num, static_cast<uint8_t>(bi->_reg));
+    for (auto const& [lo, hi] : bi->_rgns) {
+      std::cout << fmt::format("[{:x}-{:x}] ", lo, hi);
+    }
+    std::cout << "\n";
+  }
+  return 0;
+}
+
 int summarize_subroutine(CommandParamList const& cpl) {
+  using namespace ppc;
   uint32_t analysis_start = cpl.param_v<uint32_t>(1);
 
   BinaryContext ctx;
@@ -135,10 +163,22 @@ int summarize_subroutine(CommandParamList const& cpl) {
       std::cout << fmt::format("  Block 0x{:08x} -- 0x{:08x}\n", block->_block_start, block->_block_end);
     }
   }
+
+  ir::IrGraph irg = ir::translate_subroutine(subroutine);
+
+  for (size_t i = 0; i < irg._gpr_binds.ntemps(); i++) {
+    ir::BindInfo<GPR> const* bi = irg._gpr_binds.get_temp(i);
+    std::cout << fmt::format("Bind t{} on gpr r{} over range(s):", bi->_num, static_cast<uint8_t>(bi->_reg));
+    for (auto const& [lo, hi] : bi->_rgns) {
+      std::cout << fmt::format("[{:x}-{:x}] ", lo, hi);
+    }
+    std::cout << "\n";
+  }
   return 0;
 }
 
 int dump_dotfile(CommandParamList const& cpl) {
+  using namespace ppc;
   uint32_t analysis_start = cpl.param_v<uint32_t>(1);
 
   DolData dol_data;
@@ -210,6 +250,7 @@ int dump_dotfile(CommandParamList const& cpl) {
 }
 
 int print_sections(CommandParamList const& cpl) {
+  using namespace ppc;
   DolData dol_data;
   {
     std::string const& path = cpl.param_v<std::string>(0);
@@ -252,6 +293,7 @@ int print_sections(CommandParamList const& cpl) {
 }
 
 int linear_dis(CommandParamList const& cpl) {
+  using namespace ppc;
   uint32_t disassembly_start = cpl.param_v<uint32_t>(1);
   int disassembly_len = cpl.param_v<uint32_t>(2);
 

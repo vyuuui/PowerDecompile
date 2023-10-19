@@ -6,10 +6,10 @@
 #include <vector>
 
 #include "ppc/PpcDisasm.hh"
+#include "producers/RandomAccessData.hh"
 #include "utl/IntervalTree.hh"
 
-namespace decomp {
-class RandomAccessData;
+namespace decomp::ppc {
 struct RegisterLifetimes;
 
 enum class IncomingEdgeType {
@@ -118,8 +118,8 @@ std::unordered_set<BasicBlock*> dfs_backward(
     std::forward<Visit>(visitor), std::forward<Iterate>(iterator), start, std::forward<Annotation>(init_annot)...);
 }
 
-constexpr bool always_iterate(BasicBlock*, BasicBlock*) { return true; }
+constexpr bool always_iterate(BasicBlock const*, BasicBlock const*) { return true; }
 
 SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_start);
 
-}  // namespace decomp
+}  // namespace decomp::ppc

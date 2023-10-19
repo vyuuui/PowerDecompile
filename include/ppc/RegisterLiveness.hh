@@ -9,11 +9,9 @@
 #include "ppc/DataSource.hh"
 #include "ppc/RegSet.hh"
 #include "ppc/SubroutineGraph.hh"
+#include "producers/RandomAccessData.hh"
 
-namespace decomp {
-class RandomAccessData;
-struct SubroutineGraph;
-
+namespace decomp::ppc {
 struct RegisterLifetimes {
   // Per-instruction register liveness
   std::vector<GprSet> _def;
@@ -32,4 +30,4 @@ struct RegisterLifetimes {
 };
 
 void evaluate_bindings(SubroutineGraph& graph, BinaryContext const& ctx);
-}  // namespace decomp
+}  // namespace decomp::ppc

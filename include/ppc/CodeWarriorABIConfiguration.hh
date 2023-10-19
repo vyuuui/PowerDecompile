@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <optional>
 
-namespace decomp {
+namespace decomp::ppc {
 // CodeWarrior ABI configuration for the binary being decompiled
 struct CWABIConfiguration {
   // If rtoc and r13 are provided to the decompiler, it can substitute in TOC references for literal
@@ -17,4 +17,4 @@ struct CWABIConfiguration {
   std::optional<uint32_t> _restgpr_start;
 };
 
-}  // namespace decomp
+}  // namespace decomp::ppc

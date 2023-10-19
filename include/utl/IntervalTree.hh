@@ -6,6 +6,11 @@
 
 namespace decomp {
 
+template <typename T>
+constexpr bool iv_overlap(T a_lo, T a_hi, T b_lo, T b_hi) {
+  return a_hi > b_lo && b_hi < a_lo;
+}
+
 // Intervals have an inclusive lower bound and exclusive upper bound
 template <typename T, typename IvType = uint32_t>
 class dinterval_tree {
@@ -16,6 +21,8 @@ class dinterval_tree {
     T _val;
     interval_node* _lp = nullptr;
     interval_node* _rp = nullptr;
+    interval_node* _prev = nullptr;
+    interval_node* _next = nullptr;
     interval_node* _parent;
     int64_t _height = 1;
 
@@ -159,6 +166,29 @@ class dinterval_tree {
     return const_cast<T*>(const_cast<dinterval_tree const*>(this)->query_node(low, high));
   }
 
+  interval_node const* query_min_node(IvType low, IvType high) const {
+    interval_node const* search = _root;
+    while (search != nullptr) {
+      if (search->_lp != nullptr && iv_overlap(low, high, search->_lp->_lo, search->_lp->_st_max)) {
+        search = search->_lp;
+      } else if (search->overlaps(low, high)) {
+        return search;
+      } else if (search->_lp == nullptr) {
+        search = search->_rp;
+      } else if (search->_lp->_st_max <= low) {
+        search = search->_rp;
+      } else {
+        search = search->_lp;
+      }
+    }
+
+    return nullptr;
+  }
+
+  interval_node* query_min_node(IvType low, IvType high) {
+    return const_cast<T*>(const_cast<dinterval_tree const*>(this)->query_min_node(low, high));
+  }
+
   interval_node* _root = nullptr;
 
 public:
@@ -172,6 +202,34 @@ public:
 
   T* query(IvType low, IvType high) {
     return const_cast<T*>(const_cast<dinterval_tree const*>(this)->query(low, high));
+  }
+
+  T const* query_min(IvType low, IvType high) const {
+    interval_node const* node = query_min_node(low, high);
+    if (node == nullptr) {
+      return nullptr;
+    }
+    return &node->_val;
+  }
+
+  T* query_min(IvType low, IvType high) {
+    return const_cast<T*>(const_cast<dinterval_tree const*>(this)->query_min(low, high));
+  }
+
+  template <typename Cb>
+  void iterate(IvType low, IvType high, Cb&& cb) const {
+    for (interval_node const* node = query_min_node(low, high); node != nullptr && node->overlaps(low, high);
+         node = node->_next) {
+      cb(node->_val);
+    }
+  }
+
+  template <typename Cb>
+  void iterate(IvType low, IvType high, Cb&& cb) {
+    for (interval_node* node = query_min_node(low, high); node != nullptr && node->overlaps(low, high);
+         node = node->_next) {
+      cb(node->_val);
+    }
   }
 
   template <typename... Args>
@@ -201,6 +259,7 @@ public:
 
     interval_node* parent = nullptr;
     interval_node** insert_ptr;
+    bool parent_left = false;
     if (_root == nullptr) {
       insert_ptr = &_root;
     } else {
@@ -211,8 +270,10 @@ public:
 
         if (low < search_ins->_lo) {
           insert_ptr = &search_ins->_lp;
+          parent_left = false;
         } else {
           insert_ptr = &search_ins->_rp;
+          parent_left = true;
         }
 
         parent = search_ins;
@@ -221,6 +282,23 @@ public:
     }
 
     *insert_ptr = new interval_node(low, high, T(std::forward<Args>(args)...), parent);
+    interval_node* prev = nullptr;
+    interval_node* next = nullptr;
+    if (parent != nullptr) {
+      if (parent_left) {
+        prev = parent;
+        next = parent->_prev;
+      } else {
+        next = parent;
+        prev = parent->_prev;
+      }
+    }
+    if (prev != nullptr) {
+      prev->_next = *insert_ptr;
+    }
+    if (next != nullptr) {
+      next->_prev = *insert_ptr;
+    }
 
     rebalance(*insert_ptr);
     return true;

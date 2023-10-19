@@ -10,7 +10,7 @@
 #include "utl/FlagsEnum.hh"
 #include "utl/ReservedVector.hh"
 
-namespace decomp {
+namespace decomp::ppc {
 // Operation as determined by the opcode and possible function code
 enum class InstOperation {
   kAdd,
@@ -245,11 +245,9 @@ struct MetaInst {
   BinInst _binst;
   uint32_t _va;
   // All data sources being read
-  reserved_vector<DataSource, 3> _reads;
-  // Instruction immediates
-  reserved_vector<ImmSource, 3> _immediates;
+  reserved_vector<ReadSource, 4> _reads;
   // Output location
-  reserved_vector<DataSource, 2> _writes;
+  reserved_vector<WriteSource, 2> _writes;
 
   InstOperation _op = InstOperation::kInvalid;
   InstFlags _flags = InstFlags::kNone;
@@ -259,16 +257,6 @@ struct MetaInst {
     for (auto& ds : _reads) {
       if (std::holds_alternative<T>(ds)) {
         return std::get<T>(ds);
-      }
-    }
-    assert(false);
-  }
-
-  template <typename T>
-  T get_imm_op() const {
-    for (auto& is : _immediates) {
-      if (std::holds_alternative<T>(is)) {
-        return std::get<T>(is);
       }
     }
     assert(false);
@@ -287,10 +275,17 @@ struct MetaInst {
   bool is_blr() const;
 
   constexpr bool is_direct_branch() const { return _op == InstOperation::kB || _op == InstOperation::kBc; }
-  uint32_t branch_target() const { return _va + std::get<RelBranch>(_immediates[0])._rel_32; }
+  uint32_t branch_target() const {
+    if (_op == InstOperation::kB) {
+      return _va + std::get<RelBranch>(_reads[0])._rel_32;
+    } else if (_op == InstOperation::kBc) {
+      return _va + std::get<RelBranch>(_reads[2])._rel_32;
+    }
+    return 0;
+  }
 };
 
 void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out);
 
 BOType bo_type_from_imm(AuxImm imm);
-}  // namespace decomp
+}  // namespace decomp::ppc

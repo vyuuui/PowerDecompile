@@ -6,7 +6,7 @@
 #include "ppc/StackAnalysis.hh"
 #include "ppc/SubroutineGraph.hh"
 
-namespace decomp {
+namespace decomp::ppc {
 // Encapsulation of all data pertaining to a subroutine
 struct Subroutine {
   uint32_t _start_va;
@@ -16,4 +16,4 @@ struct Subroutine {
   GprSet _gpr_param;
   FprSet _fpr_param;
 };
-}  // namespace decomp
+}  // namespace decomp::ppc

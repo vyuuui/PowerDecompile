@@ -17,8 +17,8 @@ public:
   virtual float read_float(uint32_t vaddr) const = 0;
   virtual double read_double(uint32_t vaddr) const = 0;
 
-  MetaInst read_instruction(uint32_t vaddr) const {
-    MetaInst ret;
+  ppc::MetaInst read_instruction(uint32_t vaddr) const {
+    ppc::MetaInst ret;
     disasm_single(vaddr, read_word(vaddr), ret);
     return ret;
   }

@@ -6,9 +6,8 @@
 
 #include "producers/RandomAccessData.hh"
 
-namespace decomp {
+namespace decomp::ppc {
 namespace {
-
 struct pair_hash {
   constexpr std::size_t operator()(std::pair<uint32_t, uint32_t> const& v) const { return v.first ^ v.second; }
 };
@@ -182,7 +181,7 @@ SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_st
 
         case InstOperation::kB: {
           const bool absolute = check_flags(inst._flags, InstFlags::kAbsoluteAddr);
-          const uint32_t target_off = static_cast<uint32_t>(std::get<RelBranch>(inst._immediates[0])._rel_32);
+          const uint32_t target_off = static_cast<uint32_t>(std::get<RelBranch>(inst._reads[0])._rel_32);
           const uint32_t target_addr = absolute ? target_off : inst_address + target_off;
 
           handle_branch(this_block, target_addr, inst_address, OutgoingEdgeType::kUnconditional);
@@ -192,7 +191,7 @@ SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_st
 
         case InstOperation::kBc: {
           const bool absolute = check_flags(inst._flags, InstFlags::kAbsoluteAddr);
-          const uint32_t target_off = static_cast<uint32_t>(std::get<RelBranch>(inst._immediates[1])._rel_32);
+          const uint32_t target_off = static_cast<uint32_t>(std::get<RelBranch>(inst._reads[2])._rel_32);
           const uint32_t target_addr = absolute ? target_off : inst_address + target_off;
           const uint32_t next_addr = inst_address + 0x4;
 
@@ -269,4 +268,4 @@ SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_st
   return graph;
 }
 
-}  // namespace decomp
+}  // namespace decomp::ppc

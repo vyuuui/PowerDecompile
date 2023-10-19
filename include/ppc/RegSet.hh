@@ -4,7 +4,7 @@
 
 #include "ppc/DataSource.hh"
 
-namespace decomp {
+namespace decomp::ppc {
 template <typename T>
 struct RegSet {
   uint32_t _set;
@@ -79,4 +79,4 @@ template <typename... Ts>
 constexpr FprSet fpr_mask(Ts... args) {
   return FprSet{(0 | ... | static_cast<uint32_t>(1 << static_cast<uint8_t>(args)))};
 }
-}  // namespace decomp
+}  // namespace decomp::ppc

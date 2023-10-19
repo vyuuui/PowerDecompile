@@ -9,6 +9,8 @@
 
 namespace decomp {
 namespace {
+using namespace ppc;
+
 std::string opcode_name(InstOperation op) {
   switch (op) {
     case InstOperation::kAdd:
@@ -792,10 +794,6 @@ void write_inst_operands(const MetaInst& inst, std::ostream& sink) {
   }
 }
 
-void write_rel_loc(MetaInst const& inst, std::ostream& sink) {
-  sink << fmt::format("{:#x} // -> loc_{:08x}", std::get<RelBranch>(inst._immediates[0])._rel_32, inst.branch_target());
-}
-
 bool write_bcx_pseudo(const MetaInst& inst, std::ostream& sink, char const* form) {
   const uint8_t bi = inst._binst.bi_val();
   char const* flags_str = opcode_flags_string(inst._op, inst._binst);
@@ -962,7 +960,7 @@ bool handle_pseudo_inst(const MetaInst& inst, std::ostream& sink) {
       } else {
         sink << " ";
       }
-      write_rel_loc(inst, sink);
+      sink << fmt::format("{:#x} // -> loc_{:08x}", std::get<RelBranch>(inst._reads[2])._rel_32, inst.branch_target());
       return true;
 
     case InstOperation::kBclr:
@@ -1436,7 +1434,7 @@ void write_inst_disassembly(const MetaInst& inst, std::ostream& sink) {
       break;
 
     case InstOperation::kB:
-      write_rel_loc(inst, sink);
+      sink << fmt::format("{:#x} // -> loc_{:08x}", std::get<RelBranch>(inst._reads[0])._rel_32, inst.branch_target());
       break;
 
     default:
@@ -1473,9 +1471,10 @@ std::string tbr_name(TBR tbr) {
   }
 }
 
-std::string datasource_verbose(DataSource const& src) {
+std::string readsource_verbose(ReadSource const& src) {
   return std::visit(
-    overloaded{[](GPRSlice gpr) -> std::string { return fmt::format("r{}", static_cast<int>(gpr._reg)); },
+    overloaded{
+      [](GPRSlice gpr) -> std::string { return fmt::format("r{}", static_cast<int>(gpr._reg)); },
       [](FPRSlice fpr) -> std::string { return fmt::format("f{}", static_cast<int>(fpr._reg)); },
       [](CRBit bits) -> std::string { return fmt::format("cr<{:08x}>", static_cast<uint32_t>(bits)); },
       [](MemRegOff mem) -> std::string { return fmt::format("[r{} + {}]", static_cast<int>(mem._base), mem._offset); },
@@ -1484,17 +1483,29 @@ std::string datasource_verbose(DataSource const& src) {
       },
       [](SPR spr) -> std::string { return spr_name(spr); },
       [](TBR tbr) -> std::string { return tbr_name(tbr); },
-      [](FPSCRBit bits) -> std::string { return fmt::format("fpscr<{:08x}>", static_cast<uint32_t>(bits)); }},
+      [](FPSCRBit bits) -> std::string { return fmt::format("fpscr<{:08x}>", static_cast<uint32_t>(bits)); },
+      [](SIMM simm) -> std::string { return fmt::format("signed {}", simm._imm_value); },
+      [](UIMM uimm) -> std::string { return fmt::format("unsigned {}", uimm._imm_value); },
+      [](RelBranch br) -> std::string { return fmt::format("rel32 {:#x}", br._rel_32); },
+      [](AuxImm aux) -> std::string { return fmt::format("aux {}", aux._val); },
+    },
     src);
 }
 
-std::string immsource_verbose(ImmSource const& src) {
-  return std::visit(overloaded{
-                      [](SIMM simm) -> std::string { return fmt::format("signed {}", simm._imm_value); },
-                      [](UIMM uimm) -> std::string { return fmt::format("unsigned {}", uimm._imm_value); },
-                      [](RelBranch br) -> std::string { return fmt::format("rel32 {:#x}", br._rel_32); },
-                      [](AuxImm aux) -> std::string { return fmt::format("aux {}", aux._val); },
-                    },
+std::string writesource_verbose(WriteSource const& src) {
+  return std::visit(
+    overloaded{
+      [](GPRSlice gpr) -> std::string { return fmt::format("r{}", static_cast<int>(gpr._reg)); },
+      [](FPRSlice fpr) -> std::string { return fmt::format("f{}", static_cast<int>(fpr._reg)); },
+      [](CRBit bits) -> std::string { return fmt::format("cr<{:08x}>", static_cast<uint32_t>(bits)); },
+      [](MemRegOff mem) -> std::string { return fmt::format("[r{} + {}]", static_cast<int>(mem._base), mem._offset); },
+      [](MemRegReg mem) -> std::string {
+        return fmt::format("[r{} + r{}]", static_cast<int>(mem._base), static_cast<int>(mem._offset));
+      },
+      [](SPR spr) -> std::string { return spr_name(spr); },
+      [](TBR tbr) -> std::string { return tbr_name(tbr); },
+      [](FPSCRBit bits) -> std::string { return fmt::format("fpscr<{:08x}>", static_cast<uint32_t>(bits)); },
+    },
     src);
 }
 }  // namespace
@@ -1518,13 +1529,10 @@ void write_inst_info(MetaInst const& inst, std::ostream& sink) {
   sink << fmt::format("Binst: {:x}", inst._binst._bytes);
   sink << "\nOperand: " << opcode_name(inst._op);
   sink << "\nReads: ";
-  print_list(inst._reads, datasource_verbose);
-
-  sink << "\nImmediates: ";
-  print_list(inst._immediates, immsource_verbose);
+  print_list(inst._reads, readsource_verbose);
 
   sink << "\nWrites: ";
-  print_list(inst._writes, datasource_verbose);
+  print_list(inst._writes, writesource_verbose);
 
   sink << fmt::format("\nFlags: {:b}", static_cast<uint32_t>(inst._flags));
 

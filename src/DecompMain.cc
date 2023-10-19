@@ -8,6 +8,13 @@ using namespace decomp;
 
 std::vector<LaunchCommand> sCommands = {
   LaunchCommand{
+    "testcmd",
+    "Scratch command for whatever im doing",
+    {},
+    {},
+    test_cmd,
+  },
+  LaunchCommand{
     "summarize",
     "Print out a summary of information about a subroutine starting at a specified address",
     {

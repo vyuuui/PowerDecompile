@@ -1,4 +1,4 @@
-#include "ppc/RegisterBinding.hh"
+#include "ppc/RegisterLiveness.hh"
 
 #include <algorithm>
 #include <iterator>
@@ -13,7 +13,7 @@
 #include "producers/RandomAccessData.hh"
 #include "utl/FlagsEnum.hh"
 
-namespace decomp {
+namespace decomp::ppc {
 constexpr GprSet kReturnSet = gpr_mask_literal<GPR::kR3, GPR::kR4>();
 constexpr GprSet kParameterSet =
   gpr_mask_literal<GPR::kR3, GPR::kR4, GPR::kR5, GPR::kR6, GPR::kR7, GPR::kR8, GPR::kR9, GPR::kR10>();
@@ -72,7 +72,7 @@ void eval_bindings_local(BasicBlock* block, BinaryContext const& ctx) {
         def = kReturnSet;
       }
     } else {
-      for (DataSource const& read : inst._reads) {
+      for (ReadSource const& read : inst._reads) {
         if (std::holds_alternative<GPRSlice>(read)) {
           use += std::get<GPRSlice>(read)._reg;
         } else if (std::holds_alternative<MemRegReg>(read)) {
@@ -81,7 +81,7 @@ void eval_bindings_local(BasicBlock* block, BinaryContext const& ctx) {
           use += std::get<MemRegOff>(read)._base;
         }
       }
-      for (DataSource const& write : inst._writes) {
+      for (WriteSource const& write : inst._writes) {
         if (std::holds_alternative<GPRSlice>(write)) {
           def += std::get<GPRSlice>(write)._reg;
         } else if (std::holds_alternative<MemRegReg>(write)) {
@@ -108,6 +108,13 @@ void eval_bindings_local(BasicBlock* block, BinaryContext const& ctx) {
   rlt->_input = inputs;
   rlt->_guess_out = outputs;
   rlt->_overwrite = def_mask;
+
+  GprSet input_mask = inputs;
+  for (size_t i = 0; input_mask && i < block->_instructions.size(); i++) {
+    rlt->_live_in[i] += input_mask;
+    input_mask -= rlt->_use[i];
+    rlt->_live_out[i] += input_mask;
+  }
 }
 
 bool backpropagate_outputs(BasicBlock* block) {
@@ -193,4 +200,4 @@ void evaluate_bindings(SubroutineGraph& graph, BinaryContext const& ctx) {
 
   dfs_forward([](BasicBlock* cur) { clear_unused_bindings(cur); }, always_iterate, graph._root);
 }
-}  // namespace decomp
+}  // namespace decomp::ppc

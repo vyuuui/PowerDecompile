@@ -8,7 +8,7 @@
 #include "ppc/DataSource.hh"
 #include "utl/ReservedVector.hh"
 
-namespace decomp {
+namespace decomp::ppc {
 namespace {
 InstOperation op_for_psfunc(uint32_t op) {
   switch (op) {
@@ -179,7 +179,7 @@ void disasm_opcode_4(BinInst binst, MetaInst& meta_out) {
       case 38:
       case 39:
         meta_out._reads.push_back(MemRegReg{binst.ra(), DataType::kPackedSingle, binst.rb()});
-        meta_out._immediates.push_back(binst.i22());
+        meta_out._reads.push_back(binst.i22());
         meta_out._writes.push_back(binst.frd_p());
         meta_out._flags = binst.w();
         break;
@@ -256,7 +256,7 @@ void disasm_opcode_19(BinInst binst, MetaInst& meta_out) {
       meta_out._op = InstOperation::kBclr;
       meta_out._reads.push_back(binst.bi());
       meta_out._reads.push_back(SPR::kLr);
-      meta_out._immediates.push_back(binst.bo());
+      meta_out._reads.push_back(binst.bo());
       if ((binst.bo()._val & 0b00100) == 0) {
         meta_out._writes.push_back(SPR::kCtr);
       }
@@ -300,7 +300,7 @@ void disasm_opcode_19(BinInst binst, MetaInst& meta_out) {
       meta_out._op = InstOperation::kBcctr;
       meta_out._reads.push_back(binst.bi());
       meta_out._reads.push_back(SPR::kCtr);
-      meta_out._immediates.push_back(binst.bo());
+      meta_out._reads.push_back(binst.bo());
       meta_out._flags = binst.lk();
       break;
     default:
@@ -325,7 +325,7 @@ void disasm_opcode_31(BinInst binst, MetaInst& meta_out) {
       meta_out._op = InstOperation::kTw;
       meta_out._reads.push_back(binst.ra_w());
       meta_out._reads.push_back(binst.rb_w());
-      meta_out._immediates.push_back(binst.to());
+      meta_out._reads.push_back(binst.to());
       break;
     case 11:
       meta_out._op = InstOperation::kMulhwu;
@@ -450,7 +450,7 @@ void disasm_opcode_31(BinInst binst, MetaInst& meta_out) {
     case 210:
       meta_out._op = InstOperation::kMtsr;
       meta_out._reads.push_back(binst.rs_w());
-      meta_out._immediates.push_back(binst.sr());
+      meta_out._reads.push_back(binst.sr());
       break;
     case 215:
       meta_out._op = InstOperation::kStbx;
@@ -617,13 +617,13 @@ void disasm_opcode_31(BinInst binst, MetaInst& meta_out) {
       break;
     case 595:
       meta_out._op = InstOperation::kMfsr;
-      meta_out._immediates.push_back(binst.sr());
+      meta_out._reads.push_back(binst.sr());
       meta_out._writes.push_back(binst.rd_w());
       break;
     case 597:
       meta_out._op = InstOperation::kLswi;
       meta_out._reads.push_back(MemRegOff{binst.ra(), DataType::kS1, 0});
-      meta_out._immediates.push_back(binst.nb());
+      meta_out._reads.push_back(binst.nb());
       meta_out._writes.push_back(binst.rd_w());
       break;
     case 598:
@@ -670,7 +670,7 @@ void disasm_opcode_31(BinInst binst, MetaInst& meta_out) {
     case 725:
       meta_out._op = InstOperation::kStswi;
       meta_out._reads.push_back(binst.rs_w());
-      meta_out._immediates.push_back(binst.nb());
+      meta_out._reads.push_back(binst.nb());
       meta_out._writes.push_back(MemRegOff{binst.ra(), DataType::kS1, 0});
       break;
     case 727:
@@ -700,7 +700,7 @@ void disasm_opcode_31(BinInst binst, MetaInst& meta_out) {
     case 824:
       meta_out._op = InstOperation::kSrawi;
       meta_out._reads.push_back(binst.rs_w());
-      meta_out._immediates.push_back(binst.sh());
+      meta_out._reads.push_back(binst.sh());
       meta_out._writes.push_back(binst.ra_w());
       meta_out._writes.push_back(SPR::kXer);
       meta_out._flags = binst.rc();
@@ -1054,7 +1054,7 @@ void disasm_opcode_63(BinInst binst, MetaInst& meta_out) {
       break;
     case 134:
       meta_out._op = InstOperation::kMtfsfi;
-      meta_out._immediates.push_back(binst.imm());
+      meta_out._reads.push_back(binst.imm());
       meta_out._writes.push_back(binst.fpscrfd() & FPSCRBit::kWriteMask);
       meta_out._flags = binst.rc();
       break;
@@ -1177,9 +1177,9 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
   switch (binst.opcd()) {
     case 3:
       meta_out._op = InstOperation::kTwi;
-      meta_out._immediates.push_back(binst.to());
+      meta_out._reads.push_back(binst.to());
       meta_out._reads.push_back(binst.ra_w());
-      meta_out._immediates.push_back(binst.simm());
+      meta_out._reads.push_back(binst.simm());
       break;
 
     case 4:
@@ -1189,14 +1189,14 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
     case 7:
       meta_out._op = InstOperation::kMulli;
       meta_out._reads.push_back(binst.ra_w());
-      meta_out._immediates.push_back(binst.simm());
+      meta_out._reads.push_back(binst.simm());
       meta_out._writes.push_back(binst.rd_w());
       break;
 
     case 8:
       meta_out._op = InstOperation::kSubfic;
       meta_out._reads.push_back(binst.ra_w());
-      meta_out._immediates.push_back(binst.simm());
+      meta_out._reads.push_back(binst.simm());
       meta_out._writes.push_back(binst.rd_w());
       meta_out._writes.push_back(SPR::kXer);
       break;
@@ -1205,7 +1205,7 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
       meta_out._op = InstOperation::kCmpli;
       meta_out._reads.push_back(binst.ra_w());
       meta_out._reads.push_back(SPR::kXer);
-      meta_out._immediates.push_back(binst.uimm());
+      meta_out._reads.push_back(binst.uimm());
       meta_out._writes.push_back(binst.crfd());
       meta_out._flags = binst.l();
       break;
@@ -1214,7 +1214,7 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
       meta_out._op = InstOperation::kCmpi;
       meta_out._reads.push_back(binst.ra_w());
       meta_out._reads.push_back(SPR::kXer);
-      meta_out._immediates.push_back(binst.simm());
+      meta_out._reads.push_back(binst.simm());
       meta_out._writes.push_back(binst.crfd());
       meta_out._flags = binst.l();
       break;
@@ -1222,7 +1222,7 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
     case 12:
       meta_out._op = InstOperation::kAddic;
       meta_out._reads.push_back(binst.ra_w());
-      meta_out._immediates.push_back(binst.simm());
+      meta_out._reads.push_back(binst.simm());
       meta_out._writes.push_back(binst.rd_w());
       meta_out._writes.push_back(SPR::kXer);
       break;
@@ -1230,7 +1230,7 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
     case 13:
       meta_out._op = InstOperation::kAddicDot;
       meta_out._reads.push_back(binst.ra_w());
-      meta_out._immediates.push_back(binst.simm());
+      meta_out._reads.push_back(binst.simm());
       meta_out._writes.push_back(binst.rd_w());
       meta_out._writes.push_back(SPR::kXer);
       meta_out._flags = InstFlags::kWritesRecord;
@@ -1241,9 +1241,9 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
       if (binst.ra() != GPR::kR0) {
         meta_out._reads.push_back(binst.ra_w());
       } else {
-        meta_out._immediates.push_back(AuxImm{0});
+        meta_out._reads.push_back(AuxImm{0});
       }
-      meta_out._immediates.push_back(binst.simm());
+      meta_out._reads.push_back(binst.simm());
       meta_out._writes.push_back(binst.rd_w());
       break;
 
@@ -1252,17 +1252,17 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
       if (binst.ra() != GPR::kR0) {
         meta_out._reads.push_back(binst.ra_w());
       } else {
-        meta_out._immediates.push_back(AuxImm{0});
+        meta_out._reads.push_back(AuxImm{0});
       }
-      meta_out._immediates.push_back(binst.simm());
+      meta_out._reads.push_back(binst.simm());
       meta_out._writes.push_back(binst.rd_w());
       break;
 
     case 16:
       meta_out._op = InstOperation::kBc;
       meta_out._reads.push_back(binst.bi());
-      meta_out._immediates.push_back(binst.bo());
-      meta_out._immediates.push_back(binst.bd());
+      meta_out._reads.push_back(binst.bo());
+      meta_out._reads.push_back(binst.bd());
       if ((binst.bo()._val & 0b00100) == 0) {
         meta_out._writes.push_back(SPR::kCtr);
       }
@@ -1275,7 +1275,7 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
 
     case 18:
       meta_out._op = InstOperation::kB;
-      meta_out._immediates.push_back(binst.li());
+      meta_out._reads.push_back(binst.li());
       meta_out._flags = binst.aa() | binst.lk();
       break;
 
@@ -1286,9 +1286,9 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
     case 20:
       meta_out._op = InstOperation::kRlwimi;
       meta_out._reads.push_back(binst.rs_w());
-      meta_out._immediates.push_back(binst.sh());
-      meta_out._immediates.push_back(binst.mb());
-      meta_out._immediates.push_back(binst.me());
+      meta_out._reads.push_back(binst.sh());
+      meta_out._reads.push_back(binst.mb());
+      meta_out._reads.push_back(binst.me());
       meta_out._writes.push_back(binst.ra_w());
       meta_out._flags = binst.rc();
       break;
@@ -1296,9 +1296,9 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
     case 21:
       meta_out._op = InstOperation::kRlwinm;
       meta_out._reads.push_back(binst.rs_w());
-      meta_out._immediates.push_back(binst.sh());
-      meta_out._immediates.push_back(binst.mb());
-      meta_out._immediates.push_back(binst.me());
+      meta_out._reads.push_back(binst.sh());
+      meta_out._reads.push_back(binst.mb());
+      meta_out._reads.push_back(binst.me());
       meta_out._writes.push_back(binst.ra_w());
       meta_out._flags = binst.rc();
       break;
@@ -1307,8 +1307,8 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
       meta_out._op = InstOperation::kRlwnm;
       meta_out._reads.push_back(binst.rs_w());
       meta_out._reads.push_back(binst.rb_w());
-      meta_out._immediates.push_back(binst.mb());
-      meta_out._immediates.push_back(binst.me());
+      meta_out._reads.push_back(binst.mb());
+      meta_out._reads.push_back(binst.me());
       meta_out._writes.push_back(binst.ra_w());
       meta_out._flags = binst.rc();
       break;
@@ -1316,35 +1316,35 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
     case 24:
       meta_out._op = InstOperation::kOri;
       meta_out._reads.push_back(binst.rs_w());
-      meta_out._immediates.push_back(binst.uimm());
+      meta_out._reads.push_back(binst.uimm());
       meta_out._writes.push_back(binst.ra_w());
       break;
 
     case 25:
       meta_out._op = InstOperation::kOris;
       meta_out._reads.push_back(binst.rs_w());
-      meta_out._immediates.push_back(binst.uimm());
+      meta_out._reads.push_back(binst.uimm());
       meta_out._writes.push_back(binst.ra_w());
       break;
 
     case 26:
       meta_out._op = InstOperation::kXori;
       meta_out._reads.push_back(binst.rs_w());
-      meta_out._immediates.push_back(binst.uimm());
+      meta_out._reads.push_back(binst.uimm());
       meta_out._writes.push_back(binst.ra_w());
       break;
 
     case 27:
       meta_out._op = InstOperation::kXoris;
       meta_out._reads.push_back(binst.rs_w());
-      meta_out._immediates.push_back(binst.uimm());
+      meta_out._reads.push_back(binst.uimm());
       meta_out._writes.push_back(binst.ra_w());
       break;
 
     case 28:
       meta_out._op = InstOperation::kAndiDot;
       meta_out._reads.push_back(binst.rs_w());
-      meta_out._immediates.push_back(binst.uimm());
+      meta_out._reads.push_back(binst.uimm());
       meta_out._writes.push_back(binst.ra_w());
       meta_out._flags = InstFlags::kWritesRecord;
       break;
@@ -1352,7 +1352,7 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
     case 29:
       meta_out._op = InstOperation::kAndisDot;
       meta_out._reads.push_back(binst.rs_w());
-      meta_out._immediates.push_back(binst.uimm());
+      meta_out._reads.push_back(binst.uimm());
       meta_out._writes.push_back(binst.ra_w());
       meta_out._flags = InstFlags::kWritesRecord;
       break;
@@ -1519,7 +1519,7 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
     case 56:
       meta_out._op = InstOperation::kPsq_l;
       meta_out._reads.push_back(MemRegOff{binst.ra(), DataType::kPackedSingle, binst.d20()});
-      meta_out._immediates.push_back(binst.i17());
+      meta_out._reads.push_back(binst.i17());
       meta_out._writes.push_back(binst.frd_p());
       meta_out._flags = binst.w();
       break;
@@ -1527,7 +1527,7 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
     case 57:
       meta_out._op = InstOperation::kPsq_lu;
       meta_out._reads.push_back(MemRegOff{binst.ra(), DataType::kPackedSingle, binst.d20()});
-      meta_out._immediates.push_back(binst.i17());
+      meta_out._reads.push_back(binst.i17());
       meta_out._writes.push_back(binst.frd_p());
       meta_out._writes.push_back(binst.ra_w());
       meta_out._flags = binst.w();
@@ -1540,7 +1540,7 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
     case 60:
       meta_out._op = InstOperation::kPsq_st;
       meta_out._reads.push_back(binst.frs_p());
-      meta_out._immediates.push_back(binst.i17());
+      meta_out._reads.push_back(binst.i17());
       meta_out._writes.push_back(MemRegOff{binst.ra(), DataType::kPackedSingle, binst.d20()});
       meta_out._flags = binst.w();
       break;
@@ -1548,7 +1548,7 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
     case 61:
       meta_out._op = InstOperation::kPsq_stu;
       meta_out._reads.push_back(binst.frs_p());
-      meta_out._immediates.push_back(binst.i17());
+      meta_out._reads.push_back(binst.i17());
       meta_out._writes.push_back(MemRegOff{binst.ra(), DataType::kPackedSingle, binst.d20()});
       meta_out._writes.push_back(binst.ra_w());
       meta_out._flags = binst.w();
@@ -1566,7 +1566,7 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
 
 bool MetaInst::is_blr() const {
   return _op == InstOperation::kBclr && _writes.empty() &&
-         bo_type_from_imm(std::get<AuxImm>(_immediates[0])) == BOType::kAlways;
+         bo_type_from_imm(std::get<AuxImm>(_reads[0])) == BOType::kAlways;
 }
 
 BOType bo_type_from_imm(AuxImm imm) {
@@ -1604,4 +1604,4 @@ BOType bo_type_from_imm(AuxImm imm) {
   }
   return BOType::kInvalid;
 }
-}  // namespace decomp
+}  // namespace decomp::ppc

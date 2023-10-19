@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string_view>
 #include <vector>
 
 #include "producers/RandomAccessData.hh"
@@ -27,6 +28,7 @@ private:
   dinterval_tree<Section> _regions;
 
 public:
+  bool add_section(uint32_t base, std::string_view data);
   bool add_section(uint32_t base, std::vector<uint8_t>&& data);
   bool add_section(uint32_t base, std::vector<uint8_t> const& data);
 

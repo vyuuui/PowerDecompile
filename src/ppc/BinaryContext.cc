@@ -6,7 +6,7 @@
 #include "utl/ErrorOr.hh"
 #include "utl/PatternScan.hh"
 
-namespace decomp {
+namespace decomp::ppc {
 namespace {
 constexpr std::string_view kSaveGprPattern =
   "91 cb ff b8 91 eb ff bc 92 0b ff c0 92 2b ff c4 92 4b ff c8 92 6b ff cc 92 8b ff d0 92 ab ff d4 92 cb ff d8 92 eb "
@@ -46,6 +46,21 @@ ErrorOr<BinaryContext> create_from_stream(std::ifstream& data_in, BinaryType bty
   }
 }
 
+BinaryContext create_raw(uint32_t base, uint32_t entrypoint, char const* data, size_t len) {
+  BinaryContext ret;
+
+  ret._btype = BinaryType::kRaw;
+  ret._entrypoint = entrypoint;
+  ret._abi_conf._savegpr_start = 0xffffffff;
+  ret._abi_conf._restgpr_start = 0xffffffff;
+
+  std::unique_ptr<SectionedData> ram = std::make_unique<SectionedData>();
+  ram->add_section(base, std::string_view(data, len));
+  ret._ram = std::unique_ptr<RandomAccessData>(ram.release());
+
+  return ret;
+}
+
 bool is_abi_routine(BinaryContext const& ctx, uint32_t addr) {
   if (ctx._abi_conf._savegpr_start) {
     if (addr >= *ctx._abi_conf._savegpr_start && addr < *ctx._abi_conf._savegpr_start + 0x4c) {
@@ -60,4 +75,4 @@ bool is_abi_routine(BinaryContext const& ctx, uint32_t addr) {
 
   return false;
 }
-}  // namespace decomp
+}  // namespace decomp::ppc

@@ -4,7 +4,7 @@
 
 #include "ppc/DataSource.hh"
 
-namespace decomp {
+namespace decomp::ppc {
 constexpr uint32_t gen_mask(uint32_t left, uint32_t right) {
   return static_cast<uint32_t>(((uint64_t{1} << (32 - left)) - 1) & ~((uint64_t{1} << (31 - right)) - 1));
 }
@@ -174,4 +174,4 @@ public:
   constexpr uint8_t l_val() const { return ext_range(10, 10); }
   constexpr uint8_t w_val() const { return ext_range(21, 21); }
 };
-}  // namespace decomp
+}  // namespace decomp::ppc

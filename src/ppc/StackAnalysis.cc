@@ -10,7 +10,7 @@
 #include "utl/ReservedVector.hh"
 #include "utl/VariantOverloaded.hh"
 
-namespace decomp {
+namespace decomp::ppc {
 namespace {
 TypeSet convert_data_type(DataType type) {
   switch (type) {
@@ -70,7 +70,7 @@ void analyze_sp_mem_write(MetaInst const& inst, SubroutineStack& out_stack) {
 
 void analyze_sp_mem_ref(MetaInst const& inst, SubroutineStack& out_stack) {
   if (inst._op == InstOperation::kAddi) {
-    int16_t offset = inst.get_imm_op<SIMM>()._imm_value;
+    int16_t offset = std::get<SIMM>(inst._reads[1])._imm_value;
     std::vector<StackVariable>& region = region_for_offset(out_stack, offset);
     auto it =
       std::find_if(region.begin(), region.end(), [offset](StackVariable const& var) { return var._offset == offset; });
@@ -150,4 +150,4 @@ void analyze_block(BasicBlock const* block, SubroutineStack& out_stack) {
 void run_stack_analysis(SubroutineGraph const& graph, SubroutineStack& stack_out) {
   dfs_forward([&stack_out](BasicBlock const* cur) { analyze_block(cur, stack_out); }, always_iterate, graph._root);
 }
-}  // namespace decomp
+}  // namespace decomp::ppc

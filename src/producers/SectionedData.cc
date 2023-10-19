@@ -25,6 +25,10 @@ std::optional<T> read_generic(dinterval_tree<Section> const& regions, uint32_t a
 }
 }  // namespace
 
+bool SectionedData::add_section(uint32_t base, std::string_view data) {
+  return _regions.try_emplace(base, base + data.length(), base, std::vector<uint8_t>(data.begin(), data.end()));
+}
+
 bool SectionedData::add_section(uint32_t base, std::vector<uint8_t>&& data) {
   return _regions.try_emplace(base, base + data.size(), base, std::move(data));
 }
