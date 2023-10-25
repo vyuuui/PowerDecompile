@@ -63,6 +63,9 @@ struct RegSet {
 using GprSet = RegSet<GPR>;
 using FprSet = RegSet<FPR>;
 
+constexpr GprSet kAllGprs = GprSet(0xffffffff);
+constexpr FprSet kAllFprs = FprSet(0xffffffff);
+
 template <GPR... gprs>
 constexpr GprSet gpr_mask_literal() {
   return GprSet{(0 | ... | (1 << static_cast<uint8_t>(gprs)))};
@@ -78,5 +81,14 @@ constexpr GprSet gpr_mask(Ts... args) {
 template <typename... Ts>
 constexpr FprSet fpr_mask(Ts... args) {
   return FprSet{(0 | ... | static_cast<uint32_t>(1 << static_cast<uint8_t>(args)))};
+}
+
+constexpr GprSet gpr_range(GPR start) {
+  GprSet excl = gpr_mask(start)._set - 1;
+  return kAllGprs - excl;
+}
+constexpr FprSet fpr_range(GPR start) {
+  FprSet excl = fpr_mask(start)._set - 1;
+  return kAllFprs - excl;
 }
 }  // namespace decomp::ppc

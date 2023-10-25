@@ -1481,6 +1481,7 @@ std::string readsource_verbose(ReadSource const& src) {
       [](MemRegReg mem) -> std::string {
         return fmt::format("[r{} + r{}]", static_cast<int>(mem._base), static_cast<int>(mem._offset));
       },
+      [](MultiReg mr) -> std::string { return fmt::format("r{} -- r31", static_cast<int>(mr._low)); },
       [](SPR spr) -> std::string { return spr_name(spr); },
       [](TBR tbr) -> std::string { return tbr_name(tbr); },
       [](FPSCRBit bits) -> std::string { return fmt::format("fpscr<{:08x}>", static_cast<uint32_t>(bits)); },
@@ -1502,6 +1503,7 @@ std::string writesource_verbose(WriteSource const& src) {
       [](MemRegReg mem) -> std::string {
         return fmt::format("[r{} + r{}]", static_cast<int>(mem._base), static_cast<int>(mem._offset));
       },
+      [](MultiReg mr) -> std::string { return fmt::format("r{} -- r31", static_cast<int>(mr._low)); },
       [](SPR spr) -> std::string { return spr_name(spr); },
       [](TBR tbr) -> std::string { return tbr_name(tbr); },
       [](FPSCRBit bits) -> std::string { return fmt::format("fpscr<{:08x}>", static_cast<uint32_t>(bits)); },

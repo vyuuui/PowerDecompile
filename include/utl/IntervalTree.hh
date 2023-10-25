@@ -189,6 +189,7 @@ class dinterval_tree {
     return const_cast<T*>(const_cast<dinterval_tree const*>(this)->query_min_node(low, high));
   }
 
+private:
   interval_node* _root = nullptr;
 
 public:

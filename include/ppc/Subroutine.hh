@@ -3,8 +3,8 @@
 #include <cstdint>
 
 #include "ppc/RegSet.hh"
-#include "ppc/StackAnalysis.hh"
 #include "ppc/SubroutineGraph.hh"
+#include "ppc/SubroutineStack.hh"
 
 namespace decomp::ppc {
 // Encapsulation of all data pertaining to a subroutine

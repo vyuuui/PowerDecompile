@@ -12,7 +12,25 @@
 #include "producers/RandomAccessData.hh"
 
 namespace decomp::ppc {
-struct RegisterLifetimes {
+constexpr GprSet kAbiRegs = ppc::gpr_mask_literal<ppc::GPR::kR1, ppc::GPR::kR2, ppc::GPR::kR13>();
+constexpr GprSet kReturnSet = gpr_mask_literal<GPR::kR3, GPR::kR4>();
+constexpr GprSet kParameterSet =
+  gpr_mask_literal<GPR::kR3, GPR::kR4, GPR::kR5, GPR::kR6, GPR::kR7, GPR::kR8, GPR::kR9, GPR::kR10>();
+constexpr GprSet kCallerSavedGpr = gpr_mask_literal<GPR::kR0,
+  GPR::kR3,
+  GPR::kR4,
+  GPR::kR5,
+  GPR::kR6,
+  GPR::kR7,
+  GPR::kR8,
+  GPR::kR9,
+  GPR::kR10,
+  GPR::kR11,
+  GPR::kR12>();
+constexpr GprSet kCalleeSavedGpr = kAllGprs - kCallerSavedGpr - kAbiRegs;
+constexpr GprSet kKilledByCall = kCallerSavedGpr - kReturnSet;
+
+struct RegisterLiveness {
   // Per-instruction register liveness
   std::vector<GprSet> _def;
   std::vector<GprSet> _use;
@@ -29,5 +47,5 @@ struct RegisterLifetimes {
   GprSet _propagated;
 };
 
-void evaluate_bindings(SubroutineGraph& graph, BinaryContext const& ctx);
+void run_liveness_analysis(SubroutineGraph& graph, BinaryContext const& ctx);
 }  // namespace decomp::ppc

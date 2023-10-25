@@ -90,7 +90,6 @@ BasicBlock* split_blocks(BasicBlock* original_block, uint32_t address, Subroutin
   BasicBlock* new_block = new BasicBlock();
   new_block->_block_start = address;
   new_block->_block_end = original_block->_block_end;
-  new_block->_incoming_edges.push_back({IncomingEdgeType::kForwardEdge, original_block});
   new_block->_block_id = static_cast<uint32_t>(graph._nodes_by_id.size());
   graph._nodes_by_id.push_back(new_block);
 
@@ -121,7 +120,6 @@ SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_st
       BasicBlock* cur_block, uint32_t target_addr, uint32_t inst_addr, OutgoingEdgeType branch_type) {
       if (BasicBlock* known_block = at_block_head(known_blocks, target_addr); known_block != nullptr) {
         // If we're branching into the start of another block, just link us.
-        known_block->_incoming_edges.push_back({IncomingEdgeType::kForwardEdge, cur_block});
         cur_block->_outgoing_edges.push_back({branch_type, known_block});
         return;
       }
@@ -140,7 +138,6 @@ SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_st
         known_blocks.push_back(next_block);
       }
 
-      next_block->_incoming_edges.push_back({IncomingEdgeType::kForwardEdge, cur_block});
       cur_block->_outgoing_edges.push_back({branch_type, next_block});
       cur_block->_block_end = inst_addr + 0x4;
     };
@@ -161,13 +158,15 @@ SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_st
       if (fallthrough_block != nullptr && fallthrough_block != this_block) {
         this_block->_outgoing_edges.push_back({OutgoingEdgeType::kFallthrough, fallthrough_block});
         this_block->_block_end = inst_address;
-        fallthrough_block->_incoming_edges.push_back({IncomingEdgeType::kForwardEdge, this_block});
         break;
       }
 
       MetaInst inst = ram.read_instruction(inst_address);
       // The node isn't over if we're returning after the branch.
       if (check_flags(inst._flags, InstFlags::kWritesLR)) {
+        if (inst._op == InstOperation::kB) {
+          graph._direct_calls.emplace_back(inst.branch_target());
+        }
         continue;
       }
 
@@ -221,7 +220,10 @@ SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_st
       }
       graph._nodes_by_range.try_emplace(cur->_block_start, cur->_block_end, cur);
     },
-    always_iterate,
+    [](BasicBlock* next, BasicBlock* cur) {
+      next->_incoming_edges.emplace_back(IncomingEdgeType::kForwardEdge, cur);
+      return true;
+    },
     graph._root);
 
   // Loop detection algorithm

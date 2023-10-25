@@ -14,29 +14,14 @@
 #include "utl/FlagsEnum.hh"
 
 namespace decomp::ppc {
-constexpr GprSet kReturnSet = gpr_mask_literal<GPR::kR3, GPR::kR4>();
-constexpr GprSet kParameterSet =
-  gpr_mask_literal<GPR::kR3, GPR::kR4, GPR::kR5, GPR::kR6, GPR::kR7, GPR::kR8, GPR::kR9, GPR::kR10>();
-constexpr GprSet kCallerSavedGpr = gpr_mask_literal<GPR::kR0,
-  GPR::kR3,
-  GPR::kR4,
-  GPR::kR5,
-  GPR::kR6,
-  GPR::kR7,
-  GPR::kR8,
-  GPR::kR9,
-  GPR::kR10,
-  GPR::kR11,
-  GPR::kR12>();
-constexpr GprSet kKilledByCall = kCallerSavedGpr - kReturnSet;
-
 namespace {
-void eval_bindings_local(BasicBlock* block, BinaryContext const& ctx) {
-  RegisterLifetimes* rlt;
+void eval_liveness_local(BasicBlock* block, BinaryContext const& ctx) {
+  RegisterLiveness* rlt;
   if (block->_block_lifetimes == nullptr) {
-    rlt = new RegisterLifetimes();
+    rlt = new RegisterLiveness();
     block->_block_lifetimes = rlt;
   }
+  rlt = block->_block_lifetimes;
 
   GprSet inputs;
   GprSet outputs;
@@ -79,6 +64,8 @@ void eval_bindings_local(BasicBlock* block, BinaryContext const& ctx) {
           use += gpr_mask(std::get<MemRegReg>(read)._base, std::get<MemRegReg>(read)._offset);
         } else if (std::holds_alternative<MemRegOff>(read)) {
           use += std::get<MemRegOff>(read)._base;
+        } else if (std::holds_alternative<MultiReg>(read)) {
+          use += gpr_range(std::get<MultiReg>(read)._low);
         }
       }
       for (WriteSource const& write : inst._writes) {
@@ -88,6 +75,8 @@ void eval_bindings_local(BasicBlock* block, BinaryContext const& ctx) {
           use += gpr_mask(std::get<MemRegReg>(write)._base, std::get<MemRegReg>(write)._offset);
         } else if (std::holds_alternative<MemRegOff>(write)) {
           use += std::get<MemRegOff>(write)._base;
+        } else if (std::holds_alternative<MultiReg>(write)) {
+          def += gpr_range(std::get<MultiReg>(write)._low);
         }
       }
       // Any updating write does not count as a define
@@ -118,7 +107,7 @@ void eval_bindings_local(BasicBlock* block, BinaryContext const& ctx) {
 }
 
 bool backpropagate_outputs(BasicBlock* block) {
-  RegisterLifetimes* rlt = block->_block_lifetimes;
+  RegisterLiveness* rlt = block->_block_lifetimes;
 
   GprSet outedge_inputs;
   for (auto&& [_, outgoing] : block->_outgoing_edges) {
@@ -147,7 +136,7 @@ bool backpropagate_outputs(BasicBlock* block) {
 }
 
 bool propagate_guesses(BasicBlock* block) {
-  RegisterLifetimes* rlt = block->_block_lifetimes;
+  RegisterLiveness* rlt = block->_block_lifetimes;
 
   GprSet passthrough_inputs;
   for (auto&& [_, incoming] : block->_incoming_edges) {
@@ -166,8 +155,8 @@ bool propagate_guesses(BasicBlock* block) {
   return true;
 }
 
-void clear_unused_bindings(BasicBlock* block) {
-  RegisterLifetimes* rlt = block->_block_lifetimes;
+void clear_unused_sections(BasicBlock* block) {
+  RegisterLiveness* rlt = block->_block_lifetimes;
 
   // Sweep through the block to clear out liveness for unused sections, E.G.
   // D=Def U=Use .=Neither
@@ -183,8 +172,8 @@ void clear_unused_bindings(BasicBlock* block) {
 }
 }  // namespace
 
-void evaluate_bindings(SubroutineGraph& graph, BinaryContext const& ctx) {
-  dfs_forward([&ctx](BasicBlock* cur) { eval_bindings_local(cur, ctx); }, always_iterate, graph._root);
+void run_liveness_analysis(SubroutineGraph& graph, BinaryContext const& ctx) {
+  dfs_forward([&ctx](BasicBlock* cur) { eval_liveness_local(cur, ctx); }, always_iterate, graph._root);
 
   bool did_change;
   do {
@@ -198,6 +187,6 @@ void evaluate_bindings(SubroutineGraph& graph, BinaryContext const& ctx) {
       [&did_change](BasicBlock* cur) { did_change |= backpropagate_outputs(cur); }, always_iterate, graph._root);
   } while (did_change);
 
-  dfs_forward([](BasicBlock* cur) { clear_unused_bindings(cur); }, always_iterate, graph._root);
+  dfs_forward([](BasicBlock* cur) { clear_unused_sections(cur); }, always_iterate, graph._root);
 }
 }  // namespace decomp::ppc

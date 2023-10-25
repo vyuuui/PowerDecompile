@@ -146,6 +146,11 @@ struct MemRegReg {
   GPR _offset;
 };
 
+struct MultiReg {
+  GPR _low : 5;
+  DataType _type : 3;
+};
+
 struct SIMM {
   int16_t _imm_value;
 };
@@ -222,9 +227,9 @@ enum class InstFlags : uint32_t {
 };
 GEN_FLAG_OPERATORS(InstFlags)
 
-using ReadSource =
-  std::variant<GPRSlice, FPRSlice, CRBit, MemRegOff, MemRegReg, SPR, TBR, FPSCRBit, SIMM, UIMM, RelBranch, AuxImm>;
-using WriteSource = std::variant<GPRSlice, FPRSlice, CRBit, MemRegOff, MemRegReg, SPR, TBR, FPSCRBit>;
+using ReadSource = std::
+  variant<GPRSlice, FPRSlice, CRBit, MemRegOff, MemRegReg, MultiReg, SPR, TBR, FPSCRBit, SIMM, UIMM, RelBranch, AuxImm>;
+using WriteSource = std::variant<GPRSlice, FPRSlice, CRBit, MemRegOff, MemRegReg, MultiReg, SPR, TBR, FPSCRBit>;
 
 constexpr bool is_memory_ref(ReadSource const& ds) {
   return std::holds_alternative<MemRegOff>(ds) || std::holds_alternative<MemRegReg>(ds);

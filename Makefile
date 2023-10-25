@@ -1,7 +1,7 @@
 CC              := g++
 CCFLAGS_SHARED  := --std=c++17 -Wall -Werror -fno-exceptions -fno-rtti -MD -MP
 CCFLAGS_DEBUG   := $(CCFLAGS_SHARED) -g -O0
-CCFLAGS_RELEASE := $(CCFLAGS_SHARED) -O2
+CCFLAGS_RELEASE := $(CCFLAGS_SHARED) -g -O2
 CCFLAGS         := $(CCFLAGS_DEBUG)
 BASE_LIBS       := -lfmt
 

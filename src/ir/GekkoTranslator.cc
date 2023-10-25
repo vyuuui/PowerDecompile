@@ -9,6 +9,31 @@
 
 namespace decomp::ir {
 namespace {
+RefType datatype_to_reftype(ppc::DataType dt) {
+  switch (dt) {
+    case ppc::DataType::kS1:
+      return RefType::kS1;
+
+    case ppc::DataType::kS2:
+      return RefType::kS2;
+
+    case ppc::DataType::kS4:
+      return RefType::kS4;
+
+    case ppc::DataType::kSingle:
+      return RefType::kSingle;
+
+    case ppc::DataType::kDouble:
+      return RefType::kDouble;
+
+    case ppc::DataType::kPackedSingle:
+    case ppc::DataType::kSingleOrDouble:
+    case ppc::DataType::kUnknown:
+    default:
+      return RefType::kInvalid;
+  }
+}
+
 class GekkoTranslator {
   IrGraph _graph;
   IrBlock* _active_blk;
@@ -16,12 +41,21 @@ class GekkoTranslator {
   ppc::Subroutine const& _routine;
 
 private:
-  [[maybe_unused]] OpVar translate_op(ppc::ReadSource op) const;
-  [[maybe_unused]] OpVar translate_op(ppc::WriteSource op) const;
+  OpVar translate_op(ppc::ReadSource op, uint32_t va) const;
+  OpVar translate_op(ppc::WriteSource op, uint32_t va) const;
+  OpVar translate_carry_op(uint32_t va) const;
 
+  // If the OE or RC flags are set, add the translation for them
+  void translate_oerc(ppc::MetaInst const& inst, OpVar dest_op);
+
+  IrInst& translate_dss_wrr(IrOpcode type, ppc::MetaInst const& inst);
+
+  void translate_addi(IrOpcode type, ppc::MetaInst const& inst);
+  void translate_addis(ppc::MetaInst const& inst);
+  void translate_adde(ppc::MetaInst const& inst);
+  void translate_adde_imm(ppc::MetaInst const& inst, OpVar imm);
   void translate_ppc_inst(ppc::MetaInst const& inst);
-  void translate_add(ppc::MetaInst const& inst);
-  void compute_binds_local(ppc::BasicBlock const& block);
+  void compute_block_binds(ppc::BasicBlock const& block);
 
 public:
   GekkoTranslator(ppc::Subroutine const& routine) : _graph(routine), _routine(routine) {}
@@ -30,9 +64,7 @@ public:
   IrGraph&& move_graph() { return std::move(_graph); }
 };
 
-constexpr ppc::GprSet kAbiRegs = ppc::gpr_mask_literal<ppc::GPR::kR1, ppc::GPR::kR2, ppc::GPR::kR13>();
-
-void GekkoTranslator::compute_binds_local(ppc::BasicBlock const& block) {
+void GekkoTranslator::compute_block_binds(ppc::BasicBlock const& block) {
   auto const* lt = block._block_lifetimes;
   ppc::GprSet connect_in = lt->_input;
 
@@ -44,7 +76,7 @@ void GekkoTranslator::compute_binds_local(ppc::BasicBlock const& block) {
     while (delta_reg) {
       ppc::GPR ref_gpr = static_cast<ppc::GPR>(__builtin_ctz(delta_reg._set));
       delta_reg -= ref_gpr;
-      if (kAbiRegs.in_set(ref_gpr)) {
+      if (ppc::kAbiRegs.in_set(ref_gpr)) {
         continue;
       }
       if (lt->_live_in[i].in_set(ref_gpr)) {
@@ -64,7 +96,7 @@ void GekkoTranslator::compute_binds_local(ppc::BasicBlock const& block) {
   while (out_set) {
     ppc::GPR out_gpr = static_cast<ppc::GPR>(__builtin_ctz(out_set._set));
     out_set -= out_gpr;
-    if (kAbiRegs.in_set(out_gpr)) {
+    if (ppc::kAbiRegs.in_set(out_gpr)) {
       continue;
     }
 
@@ -77,8 +109,11 @@ void GekkoTranslator::compute_binds_local(ppc::BasicBlock const& block) {
   }
 }
 
-OpVar GekkoTranslator::translate_op(ppc::ReadSource op) const {
+OpVar GekkoTranslator::translate_op(ppc::ReadSource op, uint32_t va) const {
   if (auto* gpr = std::get_if<ppc::GPRSlice>(&op); gpr != nullptr) {
+    // TODO: signedness?
+    GPRBindInfo const* gprb = _graph._gpr_binds.query_temp(va, gpr->_reg);
+    return TVRef{TVTable::kGprTable, gprb->_num, datatype_to_reftype(gpr->_type)};
   } else if (auto* fpr = std::get_if<ppc::FPRSlice>(&op); fpr != nullptr) {
   } else if (auto* crb = std::get_if<ppc::CRBit>(&op); crb != nullptr) {
   } else if (auto* mem = std::get_if<ppc::MemRegOff>(&op); mem != nullptr) {
@@ -94,7 +129,7 @@ OpVar GekkoTranslator::translate_op(ppc::ReadSource op) const {
   assert(false);
 }
 
-OpVar GekkoTranslator::translate_op(ppc::WriteSource op) const {
+OpVar GekkoTranslator::translate_op(ppc::WriteSource op, uint32_t va) const {
   if (auto* gpr = std::get_if<ppc::GPRSlice>(&op); gpr != nullptr) {
   } else if (auto* fpr = std::get_if<ppc::FPRSlice>(&op); fpr != nullptr) {
   } else if (auto* crb = std::get_if<ppc::CRBit>(&op); crb != nullptr) {
@@ -107,17 +142,85 @@ OpVar GekkoTranslator::translate_op(ppc::WriteSource op) const {
   assert(false);
 }
 
+OpVar GekkoTranslator::translate_carry_op(uint32_t va) const { assert(false); }
+
+void GekkoTranslator::translate_oerc(ppc::MetaInst const& inst, OpVar dest_op) {
+  if (check_flags(inst._flags, ppc::InstFlags::kWritesRecord)) {
+    _active_blk->_insts.emplace_back(IrOpcode::kRcTest, dest_op);
+  }
+  // TODO: other flags
+}
+
+IrInst& GekkoTranslator::translate_dss_wrr(IrOpcode type, ppc::MetaInst const& inst) {
+  OpVar dest = translate_op(inst._writes[0], inst._va);
+  OpVar src1 = translate_op(inst._reads[0], inst._va);
+  OpVar src2 = translate_op(inst._reads[1], inst._va);
+
+  return _active_blk->_insts.emplace_back(type, dest, src1, src2);
+}
+
+void GekkoTranslator::translate_addi(IrOpcode type, ppc::MetaInst const& inst) {
+  if (std::get<ppc::GPRSlice>(inst._reads[0])._reg == ppc::GPR::kR1) {
+    _routine._stack.variable_for_offset(std::get<ppc::SIMM>(inst._reads[1])._imm_value);
+  } else {
+    translate_oerc(inst, translate_dss_wrr(type, inst)._ops[0]);
+  }
+}
+
+void GekkoTranslator::translate_addis(ppc::MetaInst const& inst) {
+  IrInst& inst_tr = translate_dss_wrr(IrOpcode::kAdd, inst);
+  std::get<Immediate>(inst_tr._ops[2])._val <<= 16;
+  translate_oerc(inst, inst_tr._ops[0]);
+}
+
+void GekkoTranslator::translate_adde(ppc::MetaInst const& inst) {
+  IrInst& inst_tr = translate_dss_wrr(IrOpcode::kAdd, inst);
+  _active_blk->_insts.emplace_back(IrOpcode::kAddc, inst_tr._ops[0], translate_carry_op(inst._va));
+  translate_oerc(inst, inst_tr._ops[0]);
+}
+
+void GekkoTranslator::translate_adde_imm(ppc::MetaInst const& inst, OpVar imm) {
+  OpVar dst = translate_op(inst._writes[0], inst._va);
+  OpVar src = translate_op(inst._reads[0], inst._va);
+  _active_blk->_insts.emplace_back(IrOpcode::kAddc, dst, src, imm);
+  translate_oerc(inst, dst);
+}
+
 void GekkoTranslator::translate_ppc_inst(ppc::MetaInst const& inst) {
   switch (inst._op) {
     case ppc::InstOperation::kAdd:
+      translate_oerc(inst, translate_dss_wrr(IrOpcode::kAdd, inst)._ops[0]);
+      break;
+
     case ppc::InstOperation::kAddc:
-    case ppc::InstOperation::kAdde:
+      translate_oerc(inst, translate_dss_wrr(IrOpcode::kAddc, inst)._ops[0]);
+      break;
+
     case ppc::InstOperation::kAddi:
+      translate_addi(IrOpcode::kAdd, inst);
+      break;
+
+    case ppc::InstOperation::kAddis:
+      translate_addis(inst);
+      break;
+
     case ppc::InstOperation::kAddic:
     case ppc::InstOperation::kAddicDot:
-    case ppc::InstOperation::kAddis:
+      translate_addi(IrOpcode::kAddc, inst);
+      break;
+
+    case ppc::InstOperation::kAdde:
+      translate_adde(inst);
+      break;
+
     case ppc::InstOperation::kAddme:
+      translate_adde_imm(inst, Immediate{1, true});
+      break;
+
     case ppc::InstOperation::kAddze:
+      translate_adde_imm(inst, Immediate{0, false});
+      break;
+
     case ppc::InstOperation::kDivw:
     case ppc::InstOperation::kDivwu:
     case ppc::InstOperation::kMulhw:
@@ -338,14 +441,16 @@ void GekkoTranslator::translate_ppc_inst(ppc::MetaInst const& inst) {
 
 void GekkoTranslator::translate() {
   ppc::dfs_forward(
-    [this](ppc::BasicBlock const* cur) { compute_binds_local(*cur); }, ppc::always_iterate, _routine._graph._root);
-  _graph._gpr_binds.collect_local_temps();
+    [this](ppc::BasicBlock const* cur) { compute_block_binds(*cur); }, ppc::always_iterate, _routine._graph._root);
+  _graph._gpr_binds.collect_block_scope_temps();
 
   ppc::dfs_forward(
     [this](ppc::BasicBlock const* cur) {
       _active_blk = &_graph._blocks.emplace_back();
-      for (ppc::MetaInst const& inst : cur->_instructions) {
-        translate_ppc_inst(inst);
+      for (size_t i = 0; i < cur->_instructions.size(); i++) {
+        if (cur->_perilogue_types[i] == ppc::PerilogueInstructionType::kNormalInst) {
+          translate_ppc_inst(cur->_instructions[i]);
+        }
       }
     },
     ppc::always_iterate,

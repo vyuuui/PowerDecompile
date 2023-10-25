@@ -88,7 +88,7 @@ public:
     }
   }
 
-  void collect_local_temps() {
+  void collect_block_scope_temps() {
     // Union-find temps on block boundaries to create disjoint sets of block-scoped temps
     for (auto& fwl : _forwarding_list) {
       if (fwl.empty()) {

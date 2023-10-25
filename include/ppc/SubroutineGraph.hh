@@ -5,12 +5,13 @@
 #include <unordered_set>
 #include <vector>
 
+#include "ppc/Perilogue.hh"
 #include "ppc/PpcDisasm.hh"
 #include "producers/RandomAccessData.hh"
 #include "utl/IntervalTree.hh"
 
 namespace decomp::ppc {
-struct RegisterLifetimes;
+struct RegisterLiveness;
 
 enum class IncomingEdgeType {
   kForwardEdge,
@@ -36,7 +37,8 @@ struct BasicBlock {
 
   std::vector<MetaInst> _instructions;
 
-  RegisterLifetimes* _block_lifetimes;
+  RegisterLiveness* _block_lifetimes;
+  std::vector<PerilogueInstructionType> _perilogue_types;
 };
 
 struct Loop {
@@ -53,6 +55,7 @@ struct SubroutineGraph {
   dinterval_tree<BasicBlock*, uint32_t> _nodes_by_range;
   std::vector<BasicBlock*> _exit_points;
   std::vector<Loop> _loops;
+  std::vector<uint32_t> _direct_calls;
 
   BasicBlock const* block_by_vaddr(uint32_t vaddr) const {
     auto result = _nodes_by_range.query(vaddr, vaddr + 4);
@@ -121,5 +124,4 @@ std::unordered_set<BasicBlock*> dfs_backward(
 constexpr bool always_iterate(BasicBlock const*, BasicBlock const*) { return true; }
 
 SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_start);
-
 }  // namespace decomp::ppc

@@ -1455,12 +1455,12 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
     case 46:
       meta_out._op = InstOperation::kLmw;
       meta_out._reads.push_back(MemRegOff{binst.ra(), DataType::kS4, binst.d16()});
-      meta_out._writes.push_back(binst.rd_w());
+      meta_out._writes.push_back(MultiReg{binst.rs(), DataType::kS4});
       break;
 
     case 47:
       meta_out._op = InstOperation::kStmw;
-      meta_out._reads.push_back(binst.rs_w());
+      meta_out._reads.push_back(MultiReg{binst.rs(), DataType::kS4});
       meta_out._writes.push_back(MemRegOff{binst.ra(), DataType::kS4, binst.d16()});
       break;
 

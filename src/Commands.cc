@@ -10,6 +10,7 @@
 #include "dbgutil/Disassembler.hh"
 #include "ir/GekkoTranslator.hh"
 #include "ppc/BinaryContext.hh"
+#include "ppc/Perilogue.hh"
 #include "ppc/RegisterLiveness.hh"
 #include "ppc/Subroutine.hh"
 #include "producers/DolData.hh"
@@ -27,8 +28,9 @@ int test_cmd(CommandParamList const& cpl) {
   Subroutine subroutine;
   subroutine._graph = create_graph(*ctx._ram, 0);
 
-  evaluate_bindings(subroutine._graph, ctx);
-  run_stack_analysis(subroutine._graph, subroutine._stack);
+  run_liveness_analysis(subroutine._graph, ctx);
+  subroutine._stack.run_stack_analysis(subroutine._graph);
+  run_perilogue_analysis(subroutine, ctx);
   ir::IrGraph irg = ir::translate_subroutine(subroutine);
 
   for (size_t i = 0; i < irg._gpr_binds.ntemps(); i++) {
@@ -66,8 +68,8 @@ int summarize_subroutine(CommandParamList const& cpl) {
   Subroutine subroutine;
 
   subroutine._graph = create_graph(*ctx._ram, analysis_start);
-  evaluate_bindings(subroutine._graph, ctx);
-  run_stack_analysis(subroutine._graph, subroutine._stack);
+  run_liveness_analysis(subroutine._graph, ctx);
+  subroutine._stack.run_stack_analysis(subroutine._graph);
 
   constexpr auto types_list = [](TypeSet ts) {
     reserved_vector<char const*, 5> types;
@@ -100,8 +102,8 @@ int summarize_subroutine(CommandParamList const& cpl) {
         return "";
     }
   };
-  std::cout << fmt::format("Stack information:\n  Stack size: 0x{:x}\n", subroutine._stack._stack_size);
-  for (StackVariable const& sv : subroutine._stack._stack_vars) {
+  std::cout << fmt::format("Stack information:\n  Stack size: 0x{:x}\n", subroutine._stack.stack_size());
+  for (StackVariable const& sv : subroutine._stack.var_list()) {
     auto sv_types = types_list(sv._types);
     std::cout << fmt::format("    Variable offset 0x{:x} of type(s) ", sv._offset);
     for (char const* type_str : sv_types) {
@@ -126,7 +128,7 @@ int summarize_subroutine(CommandParamList const& cpl) {
     visited.emplace(cur);
     std::cout << fmt::format("Block 0x{:08x} -- 0x{:08x}\n", cur->_block_start, cur->_block_end);
 
-    RegisterLifetimes* bbp = cur->_block_lifetimes;
+    RegisterLiveness* bbp = cur->_block_lifetimes;
     std::cout << "  Input regs: ";
     for (uint32_t i = 0; i < 32; i++) {
       if (bbp->_input.in_set(static_cast<GPR>(i))) {
@@ -164,6 +166,7 @@ int summarize_subroutine(CommandParamList const& cpl) {
     }
   }
 
+  run_perilogue_analysis(subroutine, ctx);
   ir::IrGraph irg = ir::translate_subroutine(subroutine);
 
   for (size_t i = 0; i < irg._gpr_binds.ntemps(); i++) {

@@ -6,10 +6,6 @@
 #include "utl/ReservedVector.hh"
 
 namespace decomp::ir {
-// Binds: store each individual table (stack and reg tables)
-// 32 iv trees for 32 regs, store an associated register and temp idx
-// Problem: 32 registers each with unique bind regions, so you'd need 32 interval trees (bad idea??)
-// maybe it's a good idea dude
 struct RegBind {
   uint32_t _va_lo;
   uint32_t _va_hi;
@@ -26,6 +22,7 @@ enum class IrOpcode {
 
   // Comparison
   kCmp,
+  kRcTest,
 
   // Indirection
   kCall,
@@ -42,6 +39,7 @@ enum class IrOpcode {
 
   // Arithmetic
   kAdd,
+  kAddc,
   kSub,
   kMul,
   kDiv,
@@ -65,17 +63,24 @@ enum class RefType : uint8_t {
   kU4,
   kSingle,
   kDouble,
+  kInvalid,
 };
 
+enum class TVTable : uint8_t {
+  kGprTable,
+  kFprTable,
+  kCrTable,
+  kSprTable,
+};
 struct TVRef {
-  uint8_t _table : 1;
-  uint32_t _idx : 31;
+  TVTable _table : 2;
+  uint32_t _idx : 30;
   RefType _reftype;
 };
 
 struct Immediate {
-  bool _signed : 1;
-  int32_t _val : 31;
+  uint32_t _val;
+  bool _signed;
 };
 
 using OpVar = std::variant<TVRef, Immediate>;

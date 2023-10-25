@@ -51,8 +51,6 @@ BinaryContext create_raw(uint32_t base, uint32_t entrypoint, char const* data, s
 
   ret._btype = BinaryType::kRaw;
   ret._entrypoint = entrypoint;
-  ret._abi_conf._savegpr_start = 0xffffffff;
-  ret._abi_conf._restgpr_start = 0xffffffff;
 
   std::unique_ptr<SectionedData> ram = std::make_unique<SectionedData>();
   ram->add_section(base, std::string_view(data, len));
