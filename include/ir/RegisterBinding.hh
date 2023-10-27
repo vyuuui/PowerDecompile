@@ -128,7 +128,7 @@ public:
   }
 
   BindInfo<RType> const* query_temp(uint32_t va, RType reg) const {
-    uint32_t const* val = _temp_ranges[static_cast<uint8_t>(reg)].query(va, va);
+    uint32_t const* val = _temp_ranges[static_cast<uint8_t>(reg)].query(va, va + 4);
     if (val != nullptr) {
       return &_temps[*val];
     }

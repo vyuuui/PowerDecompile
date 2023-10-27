@@ -138,7 +138,7 @@ private:
 public:
   reserved_vector() : _size(0) {}
   reserved_vector(std::initializer_list<T> l) : _size(l.size()) {
-    assert(_size < N);
+    assert(_size <= N);
     std::copy(l.begin(), l.end(), begin());
   }
 

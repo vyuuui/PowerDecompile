@@ -28,18 +28,15 @@ void perilogue_block_analysis(BasicBlock* block, SubroutineStack& stack, BinaryC
     MetaInst const& inst = block->_instructions[i];
     PerilogueInstructionType itype = PerilogueInstructionType::kNormalInst;
 
-    if (inst._op == InstOperation::kStwu && std::get<GPRSlice>(inst._reads[0])._reg == GPR::kR1) {
+    if (inst._op == InstOperation::kStwu && inst._binst.rs() == GPR::kR1) {
       itype = PerilogueInstructionType::kFrameAllocate;
-    } else if (inst._op == InstOperation::kAddi && std::get<GPRSlice>(inst._writes[0])._reg == GPR::kR1 &&
-               std::get<GPRSlice>(inst._reads[0])._reg == GPR::kR1) {
+    } else if (inst._op == InstOperation::kAddi && inst._binst.rd() == GPR::kR1 && inst._binst.ra() == GPR::kR1) {
       itype = PerilogueInstructionType::kFrameDeallocate;
-    } else if (inst._op == InstOperation::kMfspr && std::get<GPRSlice>(inst._writes[0])._reg == GPR::kR0 &&
-               std::get<SPR>(inst._reads[0]) == SPR::kLr) {
+    } else if (inst._op == InstOperation::kMfspr && inst._binst.rd() == GPR::kR0 && inst._binst.spr() == SPR::kLr) {
       itype = PerilogueInstructionType::kMoveLRToR0;
       // TODO: improve this this by ensuring that LR is a routine input
       // (requires liveness tracking of SPRs)
-    } else if (inst._op == InstOperation::kMtspr && std::get<GPRSlice>(inst._reads[0])._reg == GPR::kR0 &&
-               std::get<SPR>(inst._writes[0]) == SPR::kLr) {
+    } else if (inst._op == InstOperation::kMtspr && inst._binst.rs() == GPR::kR0 && inst._binst.spr() == SPR::kLr) {
       for (size_t j = i; j > 0; j--) {
         if (!block->_block_lifetimes->_live_out[j - 1].in_set(GPR::kR0)) {
           break;
@@ -49,7 +46,7 @@ void perilogue_block_analysis(BasicBlock* block, SubroutineStack& stack, BinaryC
           break;
         }
       }
-    } else if (inst._op == InstOperation::kStw && std::get<MemRegOff>(inst._writes[0])._base == GPR::kR1) {
+    } else if (inst._op == InstOperation::kStw && inst._binst.ra() == GPR::kR1) {
       MemRegOff store_loc = std::get<MemRegOff>(inst._writes[0]);
       GPR store_reg = std::get<GPRSlice>(inst._reads[0])._reg;
 
@@ -73,7 +70,7 @@ void perilogue_block_analysis(BasicBlock* block, SubroutineStack& stack, BinaryC
           stack.variable_for_offset(store_loc._offset)->_is_frame_storage = true;
         }
       }
-    } else if (inst._op == InstOperation::kStmw && std::get<MemRegOff>(inst._writes[0])._base == GPR::kR1) {
+    } else if (inst._op == InstOperation::kStmw && inst._binst.ra() == GPR::kR1) {
       MemRegOff store_loc = std::get<MemRegOff>(inst._writes[0]);
 
       itype = backtrack_calle_save(block, std::get<MultiReg>(inst._reads[0])._low, i);
@@ -81,7 +78,7 @@ void perilogue_block_analysis(BasicBlock* block, SubroutineStack& stack, BinaryC
       if (itype == PerilogueInstructionType::kCalleeGPRSave) {
         stack.variable_for_offset(store_loc._offset)->_is_frame_storage = true;
       }
-    } else if (inst._op == InstOperation::kLwz && std::get<MemRegOff>(inst._reads[0])._base == GPR::kR1) {
+    } else if (inst._op == InstOperation::kLwz && inst._binst.ra() == GPR::kR1) {
       MemRegOff read_loc = std::get<MemRegOff>(inst._reads[0]);
       GPR read_reg = std::get<GPRSlice>(inst._writes[0])._reg;
       if (stack.variable_for_offset(read_loc._offset)->_is_frame_storage) {
@@ -91,7 +88,7 @@ void perilogue_block_analysis(BasicBlock* block, SubroutineStack& stack, BinaryC
           itype = PerilogueInstructionType::kLoadSenderLR;
         }
       }
-    } else if (inst._op == InstOperation::kLmw && std::get<MemRegOff>(inst._reads[0])._base == GPR::kR1) {
+    } else if (inst._op == InstOperation::kLmw && inst._binst.ra() == GPR::kR1) {
       MemRegOff read_loc = std::get<MemRegOff>(inst._reads[0]);
       GPR read_reg = std::get<MultiReg>(inst._writes[0])._low;
       if (stack.variable_for_offset(read_loc._offset)->_is_frame_storage) {

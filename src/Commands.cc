@@ -15,6 +15,7 @@
 #include "ppc/Subroutine.hh"
 #include "producers/DolData.hh"
 #include "utl/LaunchCommand.hh"
+#include "utl/VariantOverloaded.hh"
 
 namespace decomp {
 int test_cmd(CommandParamList const& cpl) {
@@ -40,6 +41,136 @@ int test_cmd(CommandParamList const& cpl) {
       std::cout << fmt::format("[{:x}-{:x}] ", lo, hi);
     }
     std::cout << "\n";
+  }
+
+  int idx = 0;
+  for (ir::IrBlock const& block : irg._blocks) {
+    std::cout << fmt::format("IR for block {}\n", idx++);
+    for (ir::IrInst const& inst : block._insts) {
+      std::cout << "    ";
+      switch (inst._opc) {
+        case ir::IrOpcode::kMov:
+          std::cout << "mov";
+          break;
+
+        case ir::IrOpcode::kStore:
+          std::cout << "store";
+          break;
+
+        case ir::IrOpcode::kLoad:
+          std::cout << "load";
+          break;
+
+        case ir::IrOpcode::kCmp:
+          std::cout << "cmp";
+          break;
+
+        case ir::IrOpcode::kRcTest:
+          std::cout << "rcTest";
+          break;
+
+        case ir::IrOpcode::kCall:
+          std::cout << "call";
+          break;
+
+        case ir::IrOpcode::kReturn:
+          std::cout << "return";
+          break;
+
+        case ir::IrOpcode::kLsh:
+          std::cout << "lsh";
+          break;
+
+        case ir::IrOpcode::kRsh:
+          std::cout << "rsh";
+          break;
+
+        case ir::IrOpcode::kRol:
+          std::cout << "rol";
+          break;
+
+        case ir::IrOpcode::kRor:
+          std::cout << "ror";
+          break;
+
+        case ir::IrOpcode::kAndB:
+          std::cout << "andB";
+          break;
+
+        case ir::IrOpcode::kOrB:
+          std::cout << "orB";
+          break;
+
+        case ir::IrOpcode::kXorB:
+          std::cout << "xorB";
+          break;
+
+        case ir::IrOpcode::kNotB:
+          std::cout << "notB";
+          break;
+
+        case ir::IrOpcode::kAdd:
+          std::cout << "add";
+          break;
+
+        case ir::IrOpcode::kAddc:
+          std::cout << "addc";
+          break;
+
+        case ir::IrOpcode::kSub:
+          std::cout << "sub";
+          break;
+
+        case ir::IrOpcode::kMul:
+          std::cout << "mul";
+          break;
+
+        case ir::IrOpcode::kDiv:
+          std::cout << "div";
+          break;
+
+        case ir::IrOpcode::kNeg:
+          std::cout << "neg";
+          break;
+
+        case ir::IrOpcode::kSqrt:
+          std::cout << "sqrt";
+          break;
+
+        case ir::IrOpcode::kAbs:
+          std::cout << "abs";
+          break;
+
+        case ir::IrOpcode::kIntrinsic:
+          std::cout << "intrinsic";
+          break;
+
+        case ir::IrOpcode::kOptBarrier:
+          std::cout << "optBarrier";
+          break;
+      }
+
+      std::cout << " ";
+      for (ir::OpVar ov : inst._ops) {
+        std::visit(overloaded{
+          [](ir::TVRef tv) { std::cout << fmt::format("t{}", static_cast<uint32_t>(tv._idx)); },
+          [](ir::MemRef mr) { std::cout << fmt::format("[t{} + {:x}]", mr._gpr_tv, mr._off); },
+          [](ir::StackRef sr) { std::cout << fmt::format("var_{:x}", sr._off); },
+          [](ir::ParamRef pr) { std::cout << fmt::format("param_{:x}", pr._off); },
+          [](ir::Immediate imm) {
+            if (imm._signed) {
+              std::cout << fmt::format("{:x}", static_cast<int32_t>(imm._val));
+            } else {
+              std::cout << fmt::format("{:x}", static_cast<uint32_t>(imm._val));
+            }
+          },
+          [](ir::FunctionRef fr) { std::cout << fmt::format("func_{:x}", fr._func_va); },
+          [](ir::ConditionRef cr) { std::cout << fmt::format("crb_{:x}", cr._bits); },
+        }, ov);
+        std::cout << " ";
+      }
+      std::cout << "\n";
+    }
   }
   return 0;
 }

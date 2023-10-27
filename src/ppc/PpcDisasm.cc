@@ -1204,8 +1204,8 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
     case 10:
       meta_out._op = InstOperation::kCmpli;
       meta_out._reads.push_back(binst.ra_w());
-      meta_out._reads.push_back(SPR::kXer);
       meta_out._reads.push_back(binst.uimm());
+      meta_out._reads.push_back(SPR::kXer);
       meta_out._writes.push_back(binst.crfd());
       meta_out._flags = binst.l();
       break;
@@ -1213,8 +1213,8 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
     case 11:
       meta_out._op = InstOperation::kCmpi;
       meta_out._reads.push_back(binst.ra_w());
-      meta_out._reads.push_back(SPR::kXer);
       meta_out._reads.push_back(binst.simm());
+      meta_out._reads.push_back(SPR::kXer);
       meta_out._writes.push_back(binst.crfd());
       meta_out._flags = binst.l();
       break;
@@ -1565,8 +1565,7 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
 }
 
 bool MetaInst::is_blr() const {
-  return _op == InstOperation::kBclr && _writes.empty() &&
-         bo_type_from_imm(std::get<AuxImm>(_reads[0])) == BOType::kAlways;
+  return _op == InstOperation::kBclr && _writes.empty() && bo_type_from_imm(_binst.bo()) == BOType::kAlways;
 }
 
 BOType bo_type_from_imm(AuxImm imm) {

@@ -127,40 +127,52 @@ static_assert(static_cast<uint8_t>(DataType::kLast) <= 0b111);
 struct GPRSlice {
   GPR _reg : 5;
   DataType _type : 3;
+  constexpr bool operator==(GPRSlice rhs) const { return _reg == rhs._reg && _type == rhs._type; }
 };
 
 struct FPRSlice {
   FPR _reg : 5;
   DataType _type : 3;
+  constexpr bool operator==(FPRSlice rhs) const { return _reg == rhs._reg && _type == rhs._type; }
 };
 
 struct MemRegOff {
   GPR _base : 5;
   DataType _type : 3;
   int16_t _offset;
+  constexpr bool operator==(MemRegOff rhs) const {
+    return _base == rhs._base && _type == rhs._type && _offset == rhs._offset;
+  }
 };
 
 struct MemRegReg {
   GPR _base : 5;
   DataType _type : 3;
   GPR _offset;
+  constexpr bool operator==(MemRegReg rhs) const {
+    return _base == rhs._base && _type == rhs._type && _offset == rhs._offset;
+  }
 };
 
 struct MultiReg {
   GPR _low : 5;
   DataType _type : 3;
+  constexpr bool operator==(MultiReg rhs) const { return _low == rhs._low && _type == rhs._type; }
 };
 
 struct SIMM {
   int16_t _imm_value;
+  constexpr bool operator==(SIMM rhs) const { return _imm_value == rhs._imm_value; }
 };
 
 struct UIMM {
   uint16_t _imm_value;
+  constexpr bool operator==(UIMM rhs) const { return _imm_value == rhs._imm_value; }
 };
 
 struct RelBranch {
   int32_t _rel_32;
+  constexpr bool operator==(RelBranch rhs) const { return _rel_32 == rhs._rel_32; }
 };
 
 enum class SPR {
@@ -176,6 +188,7 @@ enum class TBR {
 
 struct AuxImm {
   uint32_t _val;
+  constexpr bool operator==(AuxImm rhs) const { return _val == rhs._val; }
 };
 
 enum class FPSCRBit : uint32_t {

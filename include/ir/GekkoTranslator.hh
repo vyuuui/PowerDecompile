@@ -7,16 +7,33 @@
 #include "ppc/Subroutine.hh"
 
 namespace decomp::ir {
+enum class CounterCheck {
+  kIgnore,
+  kCounterZero,
+  kCounterNotZero,
+};
 struct BlockTransition {
   uint32_t _target_idx;
   uint32_t _checked_bits;
   uint32_t _invert_mask;
+  bool _take_if_true;
+  CounterCheck _counter;
+
+  BlockTransition(uint32_t target_idx,
+    uint32_t checked_bits,
+    uint32_t invert_mask,
+    bool take_if_true,
+    CounterCheck counter = CounterCheck::kIgnore)
+      : _target_idx(target_idx),
+        _checked_bits(checked_bits),
+        _invert_mask(invert_mask),
+        _take_if_true(take_if_true),
+        _counter(counter) {}
 };
 
 struct IrBlock {
   std::vector<IrInst> _insts;
   std::vector<BlockTransition> _tr_out;
-  std::vector<BlockTransition> _tr_in;
 };
 
 struct IrGraph {

@@ -6,14 +6,6 @@
 #include "utl/ReservedVector.hh"
 
 namespace decomp::ir {
-struct RegBind {
-  uint32_t _va_lo;
-  uint32_t _va_hi;
-  std::variant<ppc::GPR, ppc::FPR> _reg;
-};
-struct StackBind {};
-using TempBind = std::variant<RegBind, StackBind>;
-
 enum class IrOpcode {
   // Data movement
   kMov,
@@ -26,6 +18,7 @@ enum class IrOpcode {
 
   // Indirection
   kCall,
+  kReturn,
 
   // Bit
   kLsh,
@@ -78,12 +71,33 @@ struct TVRef {
   RefType _reftype;
 };
 
+struct MemRef {
+  uint32_t _gpr_tv;
+  int16_t _off;
+};
+
+struct StackRef {
+  int16_t _off;
+};
+
+struct ParamRef {
+  int16_t _off;
+};
+
 struct Immediate {
   uint32_t _val;
   bool _signed;
 };
 
-using OpVar = std::variant<TVRef, Immediate>;
+struct FunctionRef {
+  uint32_t _func_va;
+};
+
+struct ConditionRef {
+  uint32_t _bits;
+};
+
+using OpVar = std::variant<TVRef, MemRef, StackRef, ParamRef, Immediate, FunctionRef, ConditionRef>;
 
 struct IrInst {
   IrInst(IrOpcode opc) : _opc(opc) {}
