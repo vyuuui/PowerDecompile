@@ -7,6 +7,8 @@
 namespace decomp::ppc {
 template <typename T>
 struct RegSet {
+  using RegType = T;
+
   uint32_t _set;
   constexpr RegSet() : _set(0) {}
   constexpr RegSet(uint32_t s) : _set(s) {}
@@ -16,6 +18,11 @@ struct RegSet {
   constexpr operator bool() const { return !empty(); }
   constexpr bool operator==(RegSet rhs) const { return _set == rhs._set; }
   constexpr bool operator!=(RegSet rhs) const { return _set != rhs._set; }
+
+  constexpr RegSet operator+(T rhs) const { return _set + (1 << static_cast<uint8_t>(rhs)); }
+  constexpr RegSet operator-(T rhs) const { return _set & ~(1 << static_cast<uint8_t>(rhs)); }
+  constexpr RegSet operator&(T rhs) const { return _set & (1 << static_cast<uint8_t>(rhs)); }
+  constexpr RegSet operator^(T rhs) const { return _set ^ (1 << static_cast<uint8_t>(rhs)); }
 
   // Add register to set
   constexpr RegSet& operator+=(T reg) {
@@ -58,6 +65,7 @@ struct RegSet {
   constexpr RegSet operator&(RegSet rhs) const { return _set & rhs._set; }
   // Set uniq
   constexpr RegSet operator^(RegSet rhs) const { return _set ^ rhs._set; }
+
 };
 
 using GprSet = RegSet<GPR>;
@@ -87,7 +95,7 @@ constexpr GprSet gpr_range(GPR start) {
   GprSet excl = gpr_mask(start)._set - 1;
   return kAllGprs - excl;
 }
-constexpr FprSet fpr_range(GPR start) {
+constexpr FprSet fpr_range(FPR start) {
   FprSet excl = fpr_mask(start)._set - 1;
   return kAllFprs - excl;
 }

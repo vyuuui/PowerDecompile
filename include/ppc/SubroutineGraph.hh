@@ -7,12 +7,11 @@
 
 #include "ppc/Perilogue.hh"
 #include "ppc/PpcDisasm.hh"
+#include "ppc/RegisterLiveness.hh"
 #include "producers/RandomAccessData.hh"
 #include "utl/IntervalTree.hh"
 
 namespace decomp::ppc {
-struct RegisterLiveness;
-
 enum class IncomingEdgeType {
   kForwardEdge,
   kBackEdge,
@@ -37,7 +36,8 @@ struct BasicBlock {
 
   std::vector<MetaInst> _instructions;
 
-  RegisterLiveness* _block_lifetimes;
+  std::unique_ptr<GprLiveness> _gpr_lifetimes;
+  std::unique_ptr<FprLiveness> _fpr_lifetimes;
   std::vector<PerilogueInstructionType> _perilogue_types;
 };
 
@@ -123,5 +123,5 @@ std::unordered_set<BasicBlock*> dfs_backward(
 
 constexpr bool always_iterate(BasicBlock const*, BasicBlock const*) { return true; }
 
-SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_start);
+void run_graph_analysis(Subroutine& routine, BinaryContext const& ctx, uint32_t subroutine_start);
 }  // namespace decomp::ppc

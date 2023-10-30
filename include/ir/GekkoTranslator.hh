@@ -31,6 +31,11 @@ struct BlockTransition {
         _counter(counter) {}
 };
 
+struct InputParam {
+  uint32_t _pnum;
+  IrType _type;
+};
+
 struct IrBlock {
   std::vector<IrInst> _insts;
   std::vector<BlockTransition> _tr_out;
@@ -39,8 +44,12 @@ struct IrBlock {
 struct IrGraph {
   std::vector<IrBlock> _blocks;
   GPRBindTracker _gpr_binds;
+  FPRBindTracker _fpr_binds;
+  std::vector<InputParam> _params;
 
-  IrGraph(ppc::Subroutine const& routine) : _gpr_binds(routine) { _blocks.resize(routine._graph._nodes_by_id.size()); }
+  IrGraph(ppc::Subroutine const& routine) : _gpr_binds(routine), _fpr_binds(routine) {
+    _blocks.resize(routine._graph->_nodes_by_id.size());
+  }
 };
 
 IrGraph translate_subroutine(ppc::Subroutine const& routine);

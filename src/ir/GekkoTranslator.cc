@@ -5,32 +5,33 @@
 #include "ir/RegisterBinding.hh"
 #include "ppc/RegisterLiveness.hh"
 #include "ppc/SubroutineGraph.hh"
+#include "ppc/SubroutineStack.hh"
 #include "utl/VariantOverloaded.hh"
 
 namespace decomp::ir {
 namespace {
-RefType datatype_to_reftype(ppc::DataType dt) {
+IrType datatype_to_reftype(ppc::DataType dt) {
   switch (dt) {
     case ppc::DataType::kS1:
-      return RefType::kS1;
+      return IrType::kS1;
 
     case ppc::DataType::kS2:
-      return RefType::kS2;
+      return IrType::kS2;
 
     case ppc::DataType::kS4:
-      return RefType::kS4;
+      return IrType::kS4;
 
     case ppc::DataType::kSingle:
-      return RefType::kSingle;
+      return IrType::kSingle;
 
     case ppc::DataType::kDouble:
-      return RefType::kDouble;
+      return IrType::kDouble;
 
     case ppc::DataType::kPackedSingle:
     case ppc::DataType::kSingleOrDouble:
     case ppc::DataType::kUnknown:
     default:
-      return RefType::kInvalid;
+      return IrType::kInvalid;
   }
 }
 
@@ -77,7 +78,7 @@ public:
 };
 
 void GekkoTranslator::compute_block_binds(ppc::BasicBlock const& block) {
-  auto const* lt = block._block_lifetimes;
+  ppc::GprLiveness const* lt = block._gpr_lifetimes.get();
   ppc::GprSet connect_in = lt->_input;
 
   std::array<uint32_t, 32> rgn_begin;
@@ -125,31 +126,31 @@ OpVar GekkoTranslator::translate_op(ppc::ReadSource op, uint32_t va) const {
   if (auto* gpr = std::get_if<ppc::GPRSlice>(&op); gpr != nullptr) {
     // TODO: signedness?
     GPRBindInfo const* gprb = _graph._gpr_binds.query_temp(va, gpr->_reg);
-    return TVRef {TVTable::kGprTable, gprb->_num, datatype_to_reftype(gpr->_type)};
+    return TVRef{TVTable::kGprTable, gprb->_num, datatype_to_reftype(gpr->_type)};
   } else if (auto* fpr = std::get_if<ppc::FPRSlice>(&op); fpr != nullptr) {
   } else if (auto* crb = std::get_if<ppc::CRBit>(&op); crb != nullptr) {
-    return ConditionRef {static_cast<uint32_t>(*crb)};
+    return ConditionRef{static_cast<uint32_t>(*crb)};
   } else if (auto* mem = std::get_if<ppc::MemRegOff>(&op); mem != nullptr) {
     if (mem->_base == ppc::GPR::kR1) {
-      if (_routine._stack.variable_for_offset(mem->_offset)->_is_param) {
-        return ParamRef {mem->_offset};
+      if (_routine._stack->variable_for_offset(mem->_offset)->_is_param) {
+
       } else {
-        return StackRef {mem->_offset};
+        return StackRef{mem->_offset};
       }
     } else if (mem->_base == ppc::GPR::kR2) {
       // TODO: read RTOC
     } else {
       GPRBindInfo const* gprb = _graph._gpr_binds.query_temp(va, mem->_base);
-      return MemRef {gprb->_num, mem->_offset};
+      return MemRef{gprb->_num, mem->_offset};
     }
   } else if (auto* mem = std::get_if<ppc::MemRegReg>(&op); mem != nullptr) {
   } else if (auto* spr = std::get_if<ppc::SPR>(&op); spr != nullptr) {
   } else if (auto* tbr = std::get_if<ppc::TBR>(&op); tbr != nullptr) {
   } else if (auto* frb = std::get_if<ppc::FPSCRBit>(&op); frb != nullptr) {
   } else if (auto* imm = std::get_if<ppc::SIMM>(&op); imm != nullptr) {
-    return Immediate {static_cast<uint32_t>(static_cast<int32_t>(imm->_imm_value)), true};
+    return Immediate{static_cast<uint32_t>(static_cast<int32_t>(imm->_imm_value)), true};
   } else if (auto* imm = std::get_if<ppc::UIMM>(&op); imm != nullptr) {
-    return Immediate {static_cast<uint32_t>(imm->_imm_value), false};
+    return Immediate{static_cast<uint32_t>(imm->_imm_value), false};
   } else if (auto* off = std::get_if<ppc::RelBranch>(&op); off != nullptr) {
   } else if (auto* imm = std::get_if<ppc::AuxImm>(&op); imm != nullptr) {
   }
@@ -159,22 +160,22 @@ OpVar GekkoTranslator::translate_op(ppc::ReadSource op, uint32_t va) const {
 OpVar GekkoTranslator::translate_op(ppc::WriteSource op, uint32_t va) const {
   if (auto* gpr = std::get_if<ppc::GPRSlice>(&op); gpr != nullptr) {
     GPRBindInfo const* gprb = _graph._gpr_binds.query_temp(va, gpr->_reg);
-    return TVRef {TVTable::kGprTable, gprb->_num, datatype_to_reftype(gpr->_type)};
+    return TVRef{TVTable::kGprTable, gprb->_num, datatype_to_reftype(gpr->_type)};
   } else if (auto* fpr = std::get_if<ppc::FPRSlice>(&op); fpr != nullptr) {
   } else if (auto* crb = std::get_if<ppc::CRBit>(&op); crb != nullptr) {
-    return ConditionRef {static_cast<uint32_t>(*crb)};
+    return ConditionRef{static_cast<uint32_t>(*crb)};
   } else if (auto* mem = std::get_if<ppc::MemRegOff>(&op); mem != nullptr) {
     if (mem->_base == ppc::GPR::kR1) {
-      if (_routine._stack.variable_for_offset(mem->_offset)->_is_param) {
-        return ParamRef {mem->_offset};
+      if (_routine._stack->variable_for_offset(mem->_offset)->_is_param) {
+
       } else {
-        return StackRef {mem->_offset};
+        return StackRef{mem->_offset};
       }
     } else if (mem->_base == ppc::GPR::kR2) {
       // TODO: read RTOC
     } else {
       GPRBindInfo const* gprb = _graph._gpr_binds.query_temp(va, mem->_base);
-      return MemRef {gprb->_num, mem->_offset};
+      return MemRef{gprb->_num, mem->_offset};
     }
   } else if (auto* mem = std::get_if<ppc::MemRegReg>(&op); mem != nullptr) {
   } else if (auto* spr = std::get_if<ppc::SPR>(&op); spr != nullptr) {
@@ -211,7 +212,7 @@ void GekkoTranslator::translate_addi(IrOpcode type, ppc::MetaInst const& inst) {
     OpVar dst = translate_op(inst._writes[0], inst._va);
     _active_blk->_insts.emplace_back(IrOpcode::kMov, dst, src);
   } else if (std::get<ppc::GPRSlice>(inst._reads[0])._reg == ppc::GPR::kR1) {
-    _routine._stack.variable_for_offset(std::get<ppc::SIMM>(inst._reads[1])._imm_value);
+    _routine._stack->variable_for_offset(std::get<ppc::SIMM>(inst._reads[1])._imm_value);
   } else {
     translate_oerc(inst, translate_dss_wrr(type, inst)._ops[0]);
   }
@@ -292,7 +293,7 @@ void GekkoTranslator::translate_cmp(ppc::MetaInst const& inst, bool issigned) {
 
   translate_dss_wrr(IrOpcode::kCmp, inst);
   // mark as signed
-  //ir_inst._ops[1]
+  // ir_inst._ops[1]
 }
 
 void GekkoTranslator::translate_ppc_inst(ppc::MetaInst const& inst) {
@@ -343,7 +344,7 @@ void GekkoTranslator::translate_ppc_inst(ppc::MetaInst const& inst) {
     case ppc::InstOperation::kSubfic:
     case ppc::InstOperation::kSubfme:
     case ppc::InstOperation::kSubfze:
-    break;
+      break;
 
     case ppc::InstOperation::kCmp:
     case ppc::InstOperation::kCmpi:
@@ -602,8 +603,7 @@ void GekkoTranslator::translate_block_transfer(
   }
 }
 
-void GekkoTranslator::translate_conditional_transfer(
-  ppc::BasicBlock const* to, ppc::MetaInst const& inst, bool taken) {
+void GekkoTranslator::translate_conditional_transfer(ppc::BasicBlock const* to, ppc::MetaInst const& inst, bool taken) {
   if (inst._op == ppc::InstOperation::kBc) {
     const uint32_t crb = static_cast<uint32_t>(std::get<ppc::CRBit>(inst._reads[0]));
 
@@ -660,7 +660,7 @@ void GekkoTranslator::translate_conditional_transfer(
 
 void GekkoTranslator::translate() {
   ppc::dfs_forward(
-    [this](ppc::BasicBlock const* cur) { compute_block_binds(*cur); }, ppc::always_iterate, _routine._graph._root);
+    [this](ppc::BasicBlock const* cur) { compute_block_binds(*cur); }, ppc::always_iterate, _routine._graph->_root);
   _graph._gpr_binds.collect_block_scope_temps();
 
   ppc::dfs_forward(
@@ -676,7 +676,7 @@ void GekkoTranslator::translate() {
       }
     },
     ppc::always_iterate,
-    _routine._graph._root);
+    _routine._graph->_root);
 }
 }  // namespace
 

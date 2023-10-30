@@ -1,18 +1,19 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 
 #include "ppc/RegSet.hh"
-#include "ppc/SubroutineGraph.hh"
-#include "ppc/SubroutineStack.hh"
 
 namespace decomp::ppc {
+struct SubroutineGraph;
+class SubroutineStack;
+
 // Encapsulation of all data pertaining to a subroutine
 struct Subroutine {
   uint32_t _start_va;
-  SubroutineGraph _graph;
-
-  SubroutineStack _stack;
+  std::unique_ptr<SubroutineGraph> _graph;
+  std::unique_ptr<SubroutineStack> _stack;
   GprSet _gpr_param;
   FprSet _fpr_param;
 };

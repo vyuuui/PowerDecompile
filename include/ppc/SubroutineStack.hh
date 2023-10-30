@@ -7,8 +7,9 @@
 
 namespace decomp::ppc {
 struct BasicBlock;
-struct SubroutineGraph;
 struct MetaInst;
+struct Subroutine;
+struct SubroutineGraph;
 
 enum class TypeSet : uint8_t {
   kNone = 0,
@@ -63,9 +64,11 @@ private:
   void analyze_sp_mem_ref(MetaInst const& inst);
   void analyze_sp_modify(MetaInst const& inst);
 
-public:
-  void run_stack_analysis(SubroutineGraph const& graph);
+  void analyze(SubroutineGraph const& graph);
 
+  friend void run_stack_analysis(Subroutine& routine);
+
+public:
   StackVariable const* variable_for_offset(int16_t offset) const;
   StackVariable* variable_for_offset(int16_t offset);
   constexpr uint16_t stack_size() const { return _stack_size; }
@@ -73,4 +76,6 @@ public:
   std::vector<StackVariable> const& var_list() const { return _stack_vars; }
   std::vector<StackVariable> const& param_list() const { return _stack_params; }
 };
+
+void run_stack_analysis(Subroutine& routine);
 }  // namespace decomp::ppc

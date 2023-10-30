@@ -6,6 +6,7 @@
 
 #include "ppc/DataSource.hh"
 #include "ppc/PpcDisasm.hh"
+#include "ppc/Subroutine.hh"
 #include "ppc/SubroutineGraph.hh"
 #include "utl/ReservedVector.hh"
 #include "utl/VariantOverloaded.hh"
@@ -150,7 +151,7 @@ void SubroutineStack::analyze_sp_modify(MetaInst const& inst) {
   }
 }
 
-void SubroutineStack::run_stack_analysis(SubroutineGraph const& graph) {
+void SubroutineStack::analyze(SubroutineGraph const& graph) {
   dfs_forward([this](BasicBlock const* cur) { analyze_block(cur); }, always_iterate, graph._root);
 }
 
@@ -164,5 +165,10 @@ StackVariable const* SubroutineStack::variable_for_offset(int16_t offset) const 
 
 StackVariable* SubroutineStack::variable_for_offset(int16_t offset) {
   return const_cast<StackVariable*>(const_cast<SubroutineStack const*>(this)->variable_for_offset(offset));
+}
+
+void run_stack_analysis(Subroutine& routine) {
+  routine._stack = std::make_unique<SubroutineStack>();
+  routine._stack->analyze(*routine._graph);
 }
 }  // namespace decomp::ppc

@@ -47,7 +47,7 @@ enum class IrOpcode {
   kOptBarrier,
 };
 
-enum class RefType : uint8_t {
+enum class IrType : uint8_t {
   kS1,
   kS2,
   kS4,
@@ -68,7 +68,7 @@ enum class TVTable : uint8_t {
 struct TVRef {
   TVTable _table : 2;
   uint32_t _idx : 30;
-  RefType _reftype;
+  IrType _reftype;
 };
 
 struct MemRef {
@@ -81,7 +81,7 @@ struct StackRef {
 };
 
 struct ParamRef {
-  int16_t _off;
+  uint32_t _param_idx;
 };
 
 struct Immediate {

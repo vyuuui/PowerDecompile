@@ -6,9 +6,10 @@
 #include <tuple>
 #include <vector>
 
-#include "ir/RegisterBinding.hh"
+#include "ir/IrInst.hh"
 #include "ppc/RegSet.hh"
 #include "ppc/Subroutine.hh"
+#include "ppc/SubroutineGraph.hh"
 #include "utl/IntervalTree.hh"
 
 namespace decomp::ir {
@@ -17,6 +18,7 @@ struct BindInfo {
   uint32_t _num;
   std::vector<std::pair<uint32_t, uint32_t>> _rgns;
   RType _reg;
+  IrType _type;
 
   BindInfo(uint32_t num, RType reg) : _num(num), _reg(reg) {}
 };
@@ -68,11 +70,11 @@ private:
     while (!_block_temps[cur]._cached_rep) {
       _block_temps[cur]._cached_rep = rep;
       cur = _block_temps[cur]._parent;
-    } 
+    }
   }
 
 public:
-  BindTracker(ppc::Subroutine const& routine) { _forwarding_list.resize(routine._graph._nodes_by_id.size()); }
+  BindTracker(ppc::Subroutine const& routine) { _forwarding_list.resize(routine._graph->_nodes_by_id.size()); }
 
   uint32_t add_block_bind(RType reg, uint32_t lo, uint32_t hi) {
     const uint32_t new_temp = static_cast<uint32_t>(_block_temps.size());
@@ -151,4 +153,6 @@ public:
 
 using GPRBindInfo = BindInfo<ppc::GPR>;
 using GPRBindTracker = BindTracker<ppc::GPR>;
+using FPRBindInfo = BindInfo<ppc::FPR>;
+using FPRBindTracker = BindTracker<ppc::FPR>;
 }  // namespace decomp::ir

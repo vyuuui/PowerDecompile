@@ -103,14 +103,16 @@ BasicBlock* split_blocks(BasicBlock* original_block, uint32_t address, Subroutin
 
 }  // namespace
 
-SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_start) {
-  SubroutineGraph graph;
+void run_graph_analysis(Subroutine& routine, BinaryContext const& ctx, uint32_t subroutine_start) {
+  RandomAccessData const& ram = *ctx._ram;
+
+  std::unique_ptr<SubroutineGraph> graph = std::make_unique<SubroutineGraph>();
   BasicBlock* start = new BasicBlock();
   start->_block_start = subroutine_start;
   start->_block_id = 0;
 
-  graph._root = start;
-  graph._nodes_by_id.push_back(start);
+  graph->_root = start;
+  graph->_nodes_by_id.push_back(start);
 
   std::vector<BasicBlock*> known_blocks;
   std::vector<BasicBlock*> block_stack;
@@ -126,13 +128,13 @@ SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_st
 
       BasicBlock* next_block = nullptr;
       if (BasicBlock* known_block = contained_in_block(known_blocks, target_addr); known_block != nullptr) {
-        next_block = split_blocks(known_block, target_addr, graph);
+        next_block = split_blocks(known_block, target_addr, *graph);
       } else {
         next_block = new BasicBlock();
         next_block->_block_start = target_addr;
         next_block->_block_end = target_addr + 4;
-        next_block->_block_id = static_cast<uint32_t>(graph._nodes_by_id.size());
-        graph._nodes_by_id.push_back(next_block);
+        next_block->_block_id = static_cast<uint32_t>(graph->_nodes_by_id.size());
+        graph->_nodes_by_id.push_back(next_block);
 
         block_stack.push_back(next_block);
         known_blocks.push_back(next_block);
@@ -165,7 +167,7 @@ SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_st
       // The node isn't over if we're returning after the branch.
       if (check_flags(inst._flags, InstFlags::kWritesLR)) {
         if (inst._op == InstOperation::kB) {
-          graph._direct_calls.emplace_back(inst.branch_target());
+          graph->_direct_calls.emplace_back(inst.branch_target());
         }
         continue;
       }
@@ -175,7 +177,7 @@ SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_st
       switch (inst._op) {
         case InstOperation::kBclr:
         case InstOperation::kBcctr:
-          graph._exit_points.push_back(this_block);
+          graph->_exit_points.push_back(this_block);
           break;
 
         case InstOperation::kB: {
@@ -218,13 +220,13 @@ SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_st
       for (uint32_t addr = cur->_block_start; addr < cur->_block_end; addr += 4) {
         cur->_instructions.emplace_back(ram.read_instruction(addr));
       }
-      graph._nodes_by_range.try_emplace(cur->_block_start, cur->_block_end, cur);
+      graph->_nodes_by_range.try_emplace(cur->_block_start, cur->_block_end, cur);
     },
     [](BasicBlock* next, BasicBlock* cur) {
       next->_incoming_edges.emplace_back(IncomingEdgeType::kForwardEdge, cur);
       return true;
     },
-    graph._root);
+    graph->_root);
 
   // Loop detection algorithm
   //   For each node in the graph
@@ -252,7 +254,7 @@ SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_st
       }
 
       if (incoming_in_future && incoming_outside_loop) {
-        construct_loop(graph._loops.emplace_back(cur), cuts);
+        construct_loop(graph->_loops.emplace_back(cur), cuts);
         for (auto&& [edge_type, node] : cur->_incoming_edges) {
           if (future.count(node) > 0) {
             // All edges that point back to the loop entry point are backedges
@@ -265,9 +267,9 @@ SubroutineGraph create_graph(RandomAccessData const& ram, uint32_t subroutine_st
     },
     // Iterate
     always_iterate,
-    graph._root);
+    graph->_root);
 
-  return graph;
+  routine._graph = std::move(graph);
 }
 
 }  // namespace decomp::ppc

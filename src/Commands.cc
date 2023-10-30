@@ -16,6 +16,7 @@
 #include "producers/DolData.hh"
 #include "utl/LaunchCommand.hh"
 #include "utl/VariantOverloaded.hh"
+#include "ppc/SubroutineStack.hh"
 
 namespace decomp {
 int test_cmd(CommandParamList const& cpl) {
@@ -27,10 +28,10 @@ int test_cmd(CommandParamList const& cpl) {
     "\x38\x60\x00\x03\x7C\x63\xFA\x14\x83\xE1\x00\x0C\x38\x21\x00\x10\x4E\x80\x00\x20");
 
   Subroutine subroutine;
-  subroutine._graph = create_graph(*ctx._ram, 0);
+  run_graph_analysis(subroutine, ctx, 0);
 
-  run_liveness_analysis(subroutine._graph, ctx);
-  subroutine._stack.run_stack_analysis(subroutine._graph);
+  run_liveness_analysis(subroutine, ctx);
+  run_stack_analysis(subroutine);
   run_perilogue_analysis(subroutine, ctx);
   ir::IrGraph irg = ir::translate_subroutine(subroutine);
 
@@ -156,7 +157,7 @@ int test_cmd(CommandParamList const& cpl) {
           [](ir::TVRef tv) { std::cout << fmt::format("t{}", static_cast<uint32_t>(tv._idx)); },
           [](ir::MemRef mr) { std::cout << fmt::format("[t{} + {:x}]", mr._gpr_tv, mr._off); },
           [](ir::StackRef sr) { std::cout << fmt::format("var_{:x}", sr._off); },
-          [](ir::ParamRef pr) { std::cout << fmt::format("param_{:x}", pr._off); },
+          [](ir::ParamRef pr) { std::cout << fmt::format("param_{}", pr._param_idx); },
           [](ir::Immediate imm) {
             if (imm._signed) {
               std::cout << fmt::format("{:x}", static_cast<int32_t>(imm._val));
@@ -198,9 +199,9 @@ int summarize_subroutine(CommandParamList const& cpl) {
   }
   Subroutine subroutine;
 
-  subroutine._graph = create_graph(*ctx._ram, analysis_start);
-  run_liveness_analysis(subroutine._graph, ctx);
-  subroutine._stack.run_stack_analysis(subroutine._graph);
+  run_graph_analysis(subroutine, ctx, analysis_start);
+  run_liveness_analysis(subroutine, ctx);
+  run_stack_analysis(subroutine);
 
   constexpr auto types_list = [](TypeSet ts) {
     reserved_vector<char const*, 5> types;
@@ -233,8 +234,8 @@ int summarize_subroutine(CommandParamList const& cpl) {
         return "";
     }
   };
-  std::cout << fmt::format("Stack information:\n  Stack size: 0x{:x}\n", subroutine._stack.stack_size());
-  for (StackVariable const& sv : subroutine._stack.var_list()) {
+  std::cout << fmt::format("Stack information:\n  Stack size: 0x{:x}\n", subroutine._stack->stack_size());
+  for (StackVariable const& sv : subroutine._stack->var_list()) {
     auto sv_types = types_list(sv._types);
     std::cout << fmt::format("    Variable offset 0x{:x} of type(s) ", sv._offset);
     for (char const* type_str : sv_types) {
@@ -248,7 +249,7 @@ int summarize_subroutine(CommandParamList const& cpl) {
 
   std::vector<BasicBlock*> next;
   std::set<BasicBlock*> visited;
-  next.push_back(subroutine._graph._root);
+  next.push_back(subroutine._graph->_root);
   while (!next.empty()) {
     BasicBlock* cur = next.back();
     next.pop_back();
@@ -259,23 +260,23 @@ int summarize_subroutine(CommandParamList const& cpl) {
     visited.emplace(cur);
     std::cout << fmt::format("Block 0x{:08x} -- 0x{:08x}\n", cur->_block_start, cur->_block_end);
 
-    RegisterLiveness* bbp = cur->_block_lifetimes;
+    GprLiveness* rlt = cur->_gpr_lifetimes.get();
     std::cout << "  Input regs: ";
     for (uint32_t i = 0; i < 32; i++) {
-      if (bbp->_input.in_set(static_cast<GPR>(i))) {
+      if (rlt->_input.in_set(static_cast<GPR>(i))) {
         std::cout << fmt::format("r{} ", i);
       }
     }
 
     std::cout << "\n  Output regs: ";
     for (uint32_t i = 0; i < 32; i++) {
-      if (bbp->_output.in_set(static_cast<GPR>(i))) {
+      if (rlt->_output.in_set(static_cast<GPR>(i))) {
         std::cout << fmt::format("r{} ", i);
       }
     }
     std::cout << "\n  Overwritten regs: ";
     for (uint32_t i = 0; i < 32; i++) {
-      if (bbp->_overwrite.in_set(static_cast<GPR>(i))) {
+      if (rlt->_overwrite.in_set(static_cast<GPR>(i))) {
         std::cout << fmt::format("r{} ", i);
       }
     }
@@ -289,7 +290,7 @@ int summarize_subroutine(CommandParamList const& cpl) {
     }
   }
 
-  for (Loop const& loop : subroutine._graph._loops) {
+  for (Loop const& loop : subroutine._graph->_loops) {
     std::cout << fmt::format("Loop beginning at 0x{:08x} spanning blocks:\n", loop._start->_block_start);
 
     for (BasicBlock* block : loop._contents) {
@@ -315,7 +316,7 @@ int dump_dotfile(CommandParamList const& cpl) {
   using namespace ppc;
   uint32_t analysis_start = cpl.param_v<uint32_t>(1);
 
-  DolData dol_data;
+  BinaryContext ctx;
   {
     std::string const& path = cpl.param_v<std::string>(0);
     std::ifstream file_in(path, std::ios::binary);
@@ -323,13 +324,18 @@ int dump_dotfile(CommandParamList const& cpl) {
       std::cerr << fmt::format("Failed to open path {}\n", path);
       return 1;
     }
-    if (!dol_data.load_from(file_in)) {
-      std::cerr << fmt::format("Provided file {} is not a DOL\n", path);
+
+    ErrorOr<BinaryContext> result = create_from_stream(file_in, BinaryType::kDOL);
+    if (result.is_error()) {
+      std::cerr << fmt::format("Failed to open path {}, reason: {}\n", path, result.err());
       return 1;
     }
+
+    ctx = std::move(result.val());
   }
 
-  SubroutineGraph graph = create_graph(dol_data, analysis_start);
+  Subroutine subroutine;
+  run_graph_analysis(subroutine, ctx, analysis_start);
 
   std::string const& dot_path = cpl.option_v<std::string>("out");
   std::ofstream dotfile_out(dot_path, std::ios::trunc);
@@ -338,7 +344,7 @@ int dump_dotfile(CommandParamList const& cpl) {
   }
 
   dotfile_out << fmt::format("digraph sub_{:08x} {{\n  graph [splines=ortho]\n  {{\n", analysis_start);
-  for (BasicBlock* block : graph._nodes_by_id) {
+  for (BasicBlock* block : subroutine._graph->_nodes_by_id) {
     dotfile_out << fmt::format(
       "    n{} [fontname=\"Courier New\" shape=\"box\" label=\"loc_{:08x}\\l", block->_block_id, block->_block_start);
     uint32_t i = 0;
@@ -366,7 +372,7 @@ int dump_dotfile(CommandParamList const& cpl) {
     }
   };
 
-  for (BasicBlock* block : graph._nodes_by_id) {
+  for (BasicBlock* block : subroutine._graph->_nodes_by_id) {
     if (block->_outgoing_edges.empty()) {
       continue;
     }
