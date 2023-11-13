@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "producers/DolData.hh"
+#include "producers/ElfData.hh"
 #include "utl/ErrorOr.hh"
 #include "utl/PatternScan.hh"
 
@@ -35,12 +36,35 @@ ErrorOr<BinaryContext> load_dol(std::ifstream& data_in, bool do_abi_discovery) {
 
   return ret;
 }
+
+ErrorOr<BinaryContext> load_elf(std::ifstream& data_in, bool do_abi_discovery) {
+  BinaryContext ret;
+  ret._btype = BinaryType::kELF;
+
+  std::unique_ptr<ElfData> ram = std::make_unique<ElfData>();
+  if (!ram->load_from(data_in)) {
+    return "Failed to parse ELF file, invalid format";
+  }
+
+  ret._entrypoint = ram->entrypoint();
+  if (do_abi_discovery) {
+    ret._abi_conf._savegpr_start = pattern_scan_code(*ram, kSaveGprPattern);
+    ret._abi_conf._restgpr_start = pattern_scan_code(*ram, kRestGprPattern);
+    // TODO: r2/r13
+  }
+
+  ret._ram = std::unique_ptr<RandomAccessData>(ram.release());
+
+  return ret;
+}
 }  // namespace
 
 ErrorOr<BinaryContext> create_from_stream(std::ifstream& data_in, BinaryType btype, bool do_abi_discovery) {
   switch (btype) {
     case BinaryType::kDOL:
       return load_dol(data_in, do_abi_discovery);
+    case BinaryType::kELF:
+      return load_elf(data_in, do_abi_discovery);
     default:
       return "Invalid binary type";
   }

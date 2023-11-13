@@ -35,7 +35,7 @@ CompiledPattern compile_pattern(std::string_view pattern) {
 }
 
 std::optional<uint32_t> pattern_scan_linear(std::vector<uint8_t> const& raw_data, CompiledPattern const& cpat) {
-  for (size_t i = 0; (i + cpat.size()) < raw_data.size(); i++) {
+  for (size_t i = 0; (i + cpat.size()) <= raw_data.size(); i++) {
     bool found = true;
     for (size_t j = 0; j < cpat.size(); j++) {
       if (!cpat[j]) {
@@ -62,6 +62,24 @@ std::optional<uint32_t> pattern_scan_code(DolData const& data, std::string_view 
 
   for (decomp::DolSection const& dol_sect : data.text_section_headers()) {
     decomp::Section const* sect = data.section_for_vaddr(dol_sect._vaddr);
+    if (sect == nullptr) {
+      continue;
+    }
+
+    std::optional<uint32_t> found_addr = pattern_scan_linear(sect->_data, cpat);
+    if (found_addr) {
+      return *found_addr + sect->_base;
+    }
+  }
+
+  return std::nullopt;
+}
+
+std::optional<uint32_t> pattern_scan_code(ElfData const& data, std::string_view pattern) {
+  CompiledPattern cpat = compile_pattern(pattern);
+
+  for (decomp::ElfSection const& elf_sect : data.text_section_headers()) {
+    decomp::Section const* sect = data.section_for_vaddr(elf_sect._vaddr);
     if (sect == nullptr) {
       continue;
     }

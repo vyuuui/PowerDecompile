@@ -12,7 +12,7 @@ enum class BinaryType {
   kRaw,
   kDOL,
   // kREL,
-  // kELF,
+  kELF,
   // kRSO,
 };
 struct BinaryContext {

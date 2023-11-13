@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <variant>
 
+#include "ppc/RegSet.hh"
 #include "utl/FlagsEnum.hh"
 
 namespace decomp::ppc {
@@ -86,31 +87,70 @@ constexpr bool operator>=(FPR l, FPR r) { return static_cast<int>(l) >= static_c
 constexpr bool operator<(FPR l, FPR r) { return static_cast<int>(l) < static_cast<int>(r); }
 constexpr bool operator<=(FPR l, FPR r) { return static_cast<int>(l) <= static_cast<int>(r); }
 
-enum class CRBit : uint32_t {
-  kNone = 0,
-  kAll = 0xffffffff,
-
-  kCr0 = 0b1111u << 0,
-  kCr1 = 0b1111u << 4,
-  kCr2 = 0b1111u << 8,
-  kCr3 = 0b1111u << 12,
-  kCr4 = 0b1111u << 16,
-  kCr5 = 0b1111u << 20,
-  kCr6 = 0b1111u << 24,
-  kCr7 = 0b1111u << 28,
-
-  kLt = 1u << 0,
-  kGt = 1u << 1,
-  kEq = 1u << 2,
-  kSo = 1u << 3,
-
-  kFx = 1u << 4,
-  kFex = 1u << 5,
-  kVx = 1u << 6,
-  kOx = 1u << 7,
+enum class CRField : uint8_t {
+  kCr0,
+  kCr1,
+  kCr2,
+  kCr3,
+  kCr4,
+  kCr5,
+  kCr6,
+  kCr7,
 };
-GEN_FLAG_OPERATORS(CRBit)
 
+constexpr bool operator>(CRField l, CRField r) { return static_cast<int>(l) > static_cast<int>(r); }
+constexpr bool operator>=(CRField l, CRField r) { return static_cast<int>(l) >= static_cast<int>(r); }
+constexpr bool operator<(CRField l, CRField r) { return static_cast<int>(l) < static_cast<int>(r); }
+constexpr bool operator<=(CRField l, CRField r) { return static_cast<int>(l) <= static_cast<int>(r); }
+
+//////////////////////////////
+// Predefined register sets //
+//////////////////////////////
+using GprSet = RegSet<GPR>;
+using FprSet = RegSet<FPR>;
+using CrSet = RegSet<CRField>;
+
+constexpr GprSet kAllGprs = GprSet(0xffffffff);
+constexpr FprSet kAllFprs = FprSet(0xffffffff);
+constexpr CrSet kAllCrs = CrSet(0xffffffff);
+
+template <GPR... gprs>
+constexpr GprSet gpr_mask_literal() {
+  return GprSet{(0u | ... | (1 << static_cast<uint8_t>(gprs)))};
+}
+template <FPR... gprs>
+constexpr FprSet fpr_mask_literal() {
+  return FprSet{(0u | ... | (1 << static_cast<uint8_t>(gprs)))};
+}
+template <CRField... gprs>
+constexpr CrSet cr_mask_literal() {
+  return CrSet{(0u | ... | (1 << static_cast<uint8_t>(gprs)))};
+}
+template <typename... Ts>
+constexpr GprSet gpr_mask(Ts... args) {
+  return GprSet{(0u | ... | static_cast<uint32_t>(1 << static_cast<uint8_t>(args)))};
+}
+template <typename... Ts>
+constexpr FprSet fpr_mask(Ts... args) {
+  return FprSet{(0u | ... | static_cast<uint32_t>(1 << static_cast<uint8_t>(args)))};
+}
+template <typename... Ts>
+constexpr CrSet cr_mask(Ts... args) {
+  return CrSet{(0u | ... | static_cast<uint32_t>(1 << static_cast<uint8_t>(args)))};
+}
+
+constexpr GprSet gpr_range(GPR start) {
+  GprSet excl = gpr_mask(start)._set - 1;
+  return kAllGprs - excl;
+}
+constexpr FprSet fpr_range(FPR start) {
+  FprSet excl = fpr_mask(start)._set - 1;
+  return kAllFprs - excl;
+}
+
+///////////////////////////////
+// GPR and FPR operand types //
+///////////////////////////////
 enum class DataType : uint8_t {
   kS1,
   kS2,
@@ -124,6 +164,9 @@ enum class DataType : uint8_t {
 };
 static_assert(static_cast<uint8_t>(DataType::kLast) <= 0b111);
 
+/////////////////////////////
+// Read/Write source types //
+/////////////////////////////
 struct GPRSlice {
   GPR _reg : 5;
   DataType _type : 3;
@@ -134,6 +177,24 @@ struct FPRSlice {
   FPR _reg : 5;
   DataType _type : 3;
   constexpr bool operator==(FPRSlice rhs) const { return _reg == rhs._reg && _type == rhs._type; }
+};
+
+struct CrSlice {
+  static constexpr CrSlice from_bitnum(uint32_t bitnum) {
+    return CrSlice {
+      ._bits = static_cast<uint8_t>(1 << (bitnum & 3)),
+      ._field = static_cast<CRField>(bitnum >> 2),
+    };
+  }
+  static constexpr CrSlice from_fieldnum(uint32_t fieldnum) {
+    return CrSlice {
+      ._bits = 0b1111,
+      ._field = static_cast<CRField>(fieldnum),
+    };
+  }
+  uint8_t _bits : 4;
+  CRField _field : 3;
+  constexpr bool operator==(CrSlice rhs) const { return _bits == rhs._bits && _field == rhs._field; }
 };
 
 struct MemRegOff {
@@ -229,20 +290,32 @@ enum class FPSCRBit : uint32_t {
 GEN_FLAG_OPERATORS(FPSCRBit)
 
 enum class InstFlags : uint32_t {
-  kNone = 0b000000,
-  kAll = 0b111111,
+  kNone = 0b0000000,
+  kAll = 0b1111110,
   kWritesRecord = 0b000001,
   kWritesXER = 0b000010,
   kWritesLR = 0b000100,
   kAbsoluteAddr = 0b001000,
   kPsLoadsOne = 0b010000,
   kLongMode = 0b100000,
+  kWritesFpRecord = 0b1000000,
 };
 GEN_FLAG_OPERATORS(InstFlags)
 
-using ReadSource = std::
-  variant<GPRSlice, FPRSlice, CRBit, MemRegOff, MemRegReg, MultiReg, SPR, TBR, FPSCRBit, SIMM, UIMM, RelBranch, AuxImm>;
-using WriteSource = std::variant<GPRSlice, FPRSlice, CRBit, MemRegOff, MemRegReg, MultiReg, SPR, TBR, FPSCRBit>;
+using ReadSource = std::variant<GPRSlice,
+  FPRSlice,
+  CrSlice,
+  MemRegOff,
+  MemRegReg,
+  MultiReg,
+  SPR,
+  TBR,
+  FPSCRBit,
+  SIMM,
+  UIMM,
+  RelBranch,
+  AuxImm>;
+using WriteSource = std::variant<GPRSlice, FPRSlice, CrSlice, MemRegOff, MemRegReg, MultiReg, SPR, TBR, FPSCRBit>;
 
 constexpr bool is_memory_ref(ReadSource const& ds) {
   return std::holds_alternative<MemRegOff>(ds) || std::holds_alternative<MemRegReg>(ds);

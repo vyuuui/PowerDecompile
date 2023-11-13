@@ -13,14 +13,19 @@
 #include "utl/IntervalTree.hh"
 
 namespace decomp::ir {
+constexpr uint32_t kInvalidTmp = 0xffffffff;
+
 template <typename RType>
 struct BindInfo {
   uint32_t _num;
   std::vector<std::pair<uint32_t, uint32_t>> _rgns;
   RType _reg;
   IrType _type;
+  bool _is_param;
+  bool _is_ret;
 
-  BindInfo(uint32_t num, RType reg) : _num(num), _reg(reg) {}
+  BindInfo(uint32_t num, RType reg, bool is_param, bool is_ret)
+      : _num(num), _reg(reg), _is_param(is_param), _is_ret(is_ret) {}
 };
 
 template <typename RType>
@@ -30,13 +35,22 @@ private:
     uint32_t _ltemp_num;
     std::pair<uint32_t, uint32_t> _rgn;
     RType _reg;
+    bool _is_param;
+    bool _is_ret;
     // For union-find
     uint32_t _parent;
     std::optional<uint32_t> _cached_rep;
     std::optional<uint32_t> _gtemp_num;
 
-    BlockBindInfo(uint32_t num, uint32_t lo, uint32_t hi, RType reg)
-        : _ltemp_num(num), _rgn(lo, hi), _reg(reg), _parent(num), _cached_rep(std::nullopt), _gtemp_num(std::nullopt) {}
+    BlockBindInfo(uint32_t num, uint32_t lo, uint32_t hi, RType reg, bool is_param, bool is_ret)
+        : _ltemp_num(num),
+          _rgn(lo, hi),
+          _reg(reg),
+          _is_param(is_param),
+          _is_ret(is_ret),
+          _parent(num),
+          _cached_rep(std::nullopt),
+          _gtemp_num(std::nullopt) {}
   };
 
 private:
@@ -76,9 +90,9 @@ private:
 public:
   BindTracker(ppc::Subroutine const& routine) { _forwarding_list.resize(routine._graph->_nodes_by_id.size()); }
 
-  uint32_t add_block_bind(RType reg, uint32_t lo, uint32_t hi) {
+  uint32_t add_block_bind(RType reg, bool is_param, bool is_ret, uint32_t lo, uint32_t hi) {
     const uint32_t new_temp = static_cast<uint32_t>(_block_temps.size());
-    _block_temps.emplace_back(new_temp, lo, hi, reg);
+    _block_temps.emplace_back(new_temp, lo, hi, reg, is_param, is_ret);
     return new_temp;
   }
 
@@ -106,6 +120,8 @@ public:
         for (auto it = grp + 1; it != fwl.end(); it++) {
           BlockBindInfo& rep_it = representative(*it);
           rep_it._parent = rep_grp._ltemp_num;
+          rep_grp._is_param |= rep_it._is_param;
+          rep_grp._is_ret |= rep_it._is_ret;
         }
         fwl.erase(grp, fwl.end());
       }
@@ -117,7 +133,7 @@ public:
       BlockBindInfo& rep = _block_temps[*bbi._cached_rep];
       if (!rep._gtemp_num) {
         rep._gtemp_num = static_cast<uint32_t>(_temps.size());
-        _temps.emplace_back(*rep._gtemp_num, rep._reg);
+        _temps.emplace_back(*rep._gtemp_num, rep._reg, rep._is_param, rep._is_ret);
       }
       BindInfo<RType>& gtemp = _temps[*rep._gtemp_num];
       gtemp._rgns.emplace_back(bbi._rgn);
@@ -155,4 +171,6 @@ using GPRBindInfo = BindInfo<ppc::GPR>;
 using GPRBindTracker = BindTracker<ppc::GPR>;
 using FPRBindInfo = BindInfo<ppc::FPR>;
 using FPRBindTracker = BindTracker<ppc::FPR>;
+using CRBindInfo = BindInfo<ppc::CRField>;
+using CRBindTracker = BindTracker<ppc::CRField>;
 }  // namespace decomp::ir

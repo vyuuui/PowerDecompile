@@ -91,12 +91,14 @@ BasicBlock* split_blocks(BasicBlock* original_block, uint32_t address, Subroutin
   new_block->_block_start = address;
   new_block->_block_end = original_block->_block_end;
   new_block->_block_id = static_cast<uint32_t>(graph._nodes_by_id.size());
+  new_block->_terminal_block = original_block->_terminal_block;
   graph._nodes_by_id.push_back(new_block);
 
   // Original block is on top
   new_block->_outgoing_edges = std::move(original_block->_outgoing_edges);
   original_block->_outgoing_edges.push_back({OutgoingEdgeType::kFallthrough, new_block});
   original_block->_block_end = address;
+  original_block->_terminal_block = false;
 
   return new_block;
 }
@@ -177,7 +179,7 @@ void run_graph_analysis(Subroutine& routine, BinaryContext const& ctx, uint32_t 
       switch (inst._op) {
         case InstOperation::kBclr:
         case InstOperation::kBcctr:
-          graph->_exit_points.push_back(this_block);
+          this_block->_terminal_block = true;
           break;
 
         case InstOperation::kB: {
@@ -268,6 +270,13 @@ void run_graph_analysis(Subroutine& routine, BinaryContext const& ctx, uint32_t 
     // Iterate
     always_iterate,
     graph->_root);
+
+  // Add all exit points at end
+  for (BasicBlock* block : graph->_nodes_by_id) {
+    if (block->_terminal_block) {
+      graph->_exit_points.push_back(block);
+    }
+  }
 
   routine._graph = std::move(graph);
 }

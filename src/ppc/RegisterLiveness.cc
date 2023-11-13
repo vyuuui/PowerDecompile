@@ -17,15 +17,6 @@
 namespace decomp::ppc {
 namespace {
 template <typename SetType>
-constexpr RegisterLiveness<typename SetType::RegType>* get_liveness(BasicBlock* block) {
-  if constexpr (std::is_same_v<SetType, GprSet>) {
-    return block->_gpr_lifetimes.get();
-  } else if constexpr (std::is_same_v<SetType, FprSet>) {
-    return block->_fpr_lifetimes.get();
-  }
-}
-
-template <typename SetType>
 SetType uses_for_read(ReadSource const& read) {
   SetType uses;
   if constexpr (std::is_same_v<SetType, GprSet>) {
@@ -41,6 +32,10 @@ SetType uses_for_read(ReadSource const& read) {
   } else if constexpr (std::is_same_v<SetType, FprSet>) {
     if (std::holds_alternative<FPRSlice>(read)) {
       uses += std::get<FPRSlice>(read)._reg;
+    }
+  } else if constexpr (std::is_same_v<SetType, CrSet>) {
+    if (std::holds_alternative<CrSlice>(read)) {
+      uses += std::get<CrSlice>(read)._field;
     }
   }
   return uses;
@@ -73,18 +68,27 @@ SetType defs_for_write(WriteSource const& write) {
     if (std::holds_alternative<FPRSlice>(write)) {
       defs += std::get<FPRSlice>(write)._reg;
     }
+  } else if constexpr (std::is_same_v<SetType, CrSet>) {
+    if (std::holds_alternative<CrSlice>(write)) {
+      defs += std::get<CrSlice>(write)._field;
+    }
   }
   return defs;
 }
 
-constexpr struct {
-  std::tuple<GprSet, FprSet> _abi_regs = {kAbiRegs, FprSet()};
-  std::tuple<GprSet, FprSet> _return_set = {kReturnSetGpr, kReturnSetFpr};
-  std::tuple<GprSet, FprSet> _parameter_set = {kParameterSetGpr, kParameterSetFpr};
-  std::tuple<GprSet, FprSet> _caller_saved = {kCallerSavedGpr, kCallerSavedFpr};
-  std::tuple<GprSet, FprSet> _callee_saved = {kCalleeSavedGpr, kCalleeSavedFpr};
-  std::tuple<GprSet, FprSet> _killed_by_caller = {kKilledByCallGpr, kKilledByCallFpr};
-} kRegSets;
+template <typename SetType>
+SetType defs_for_flags(InstFlags flags) {
+  SetType defs;
+  if constexpr (std::is_same_v<SetType, CrSet>) {
+    if (check_flags(flags, InstFlags::kWritesRecord)) {
+      defs += CRField::kCr0;
+    }
+    if (check_flags(flags, InstFlags::kWritesFpRecord)) {
+      defs += CRField::kCr1;
+    }
+  }
+  return defs;
+}
 
 template <typename SetType>
 void eval_liveness_local(BasicBlock* block, BinaryContext const& ctx) {
@@ -131,6 +135,7 @@ void eval_liveness_local(BasicBlock* block, BinaryContext const& ctx) {
         use += uses_for_write<SetType>(write);
         def += defs_for_write<SetType>(write);
       }
+      def += defs_for_flags<SetType>(inst._flags);
       // Any updating write does not count as a define
       def -= use;
     }
@@ -165,6 +170,9 @@ bool backpropagate_outputs(BasicBlock* block) {
   SetType outedge_inputs;
   for (auto&& [_, outgoing] : block->_outgoing_edges) {
     outedge_inputs += get_liveness<SetType>(outgoing)->_input;
+  }
+  if (block->_terminal_block) {
+    outedge_inputs += std::get<SetType>(kRegSets._return_set);
   }
 
   SetType used_out = outedge_inputs & rlt->_guess_out;
@@ -210,7 +218,7 @@ bool propagate_guesses(BasicBlock* block) {
 }
 
 template <typename SetType>
-void clear_unused_sections(BasicBlock* block) {
+void clear_unused_sections(BasicBlock* block, BinaryContext const& ctx) {
   auto rlt = get_liveness<SetType>(block);
 
   // Sweep through the block to clear out liveness for unused sections, E.G.
@@ -220,8 +228,19 @@ void clear_unused_sections(BasicBlock* block) {
   //                              unused section
   SetType unused_mask = rlt->_guess_out;
   for (size_t i = block->_instructions.size(); i > 0; i--) {
+    MetaInst const& inst = block->_instructions[i - 1];
     rlt->_live_out[i - 1] -= unused_mask;
-    unused_mask = unused_mask + rlt->_def[i - 1] - rlt->_use[i - 1];
+
+    SetType possible_call_uses;
+    if (check_flags(inst._flags, InstFlags::kWritesLR)) {
+      if (inst._op == InstOperation::kB && !is_abi_routine(ctx, inst.branch_target())) {
+        possible_call_uses = std::get<SetType>(kRegSets._parameter_set);
+      } else if (inst._op == InstOperation::kBclr || inst._op == InstOperation::kBc ||
+                 inst._op == InstOperation::kBcctr) {
+        possible_call_uses = std::get<SetType>(kRegSets._parameter_set);
+      }
+    }
+    unused_mask = unused_mask + rlt->_def[i - 1] - rlt->_use[i - 1] - possible_call_uses;
     rlt->_live_in[i - 1] -= unused_mask;
   }
 }
@@ -234,9 +253,7 @@ void find_routine_params(BasicBlock* cur) {
     provided += get_liveness<SetType>(in_node)->_output;
   }
 
-  if (expected - provided) {
-    get_liveness<SetType>(cur)->_routine_inputs += expected - provided;
-  }
+  get_liveness<SetType>(cur)->_routine_inputs += (expected - provided) & std::get<SetType>(kRegSets._parameter_set);
 }
 }  // namespace
 
@@ -244,52 +261,77 @@ void find_routine_params(BasicBlock* cur) {
 //  on initial disasm of the subroutine, have a marker if it has any FP instructions
 //  if none, skip FP analysis and either fill _fpr_lifetimes with nothing or leave it null
 void run_liveness_analysis(Subroutine& routine, BinaryContext const& ctx) {
+  struct IterState {
+    bool gpr_changed = false, gpr_done = false;
+    bool fpr_changed = false, fpr_done = false;
+    bool cr_changed = false, cr_done = false;
+    void iterate() {
+      gpr_done = !gpr_changed;
+      fpr_done = !fpr_changed;
+      cr_done = !cr_changed;
+      gpr_changed = false;
+      fpr_changed = false;
+      cr_changed = false;
+    }
+    bool done() const { return gpr_done && fpr_done && cr_done; }
+  };
+
   // Cycle 1: Evaluate liveness within a block, ignoring neighbors
   dfs_forward(
     [&ctx](BasicBlock* cur) {
       cur->_gpr_lifetimes = std::make_unique<GprLiveness>();
       cur->_fpr_lifetimes = std::make_unique<FprLiveness>();
+      cur->_cr_lifetimes = std::make_unique<CrLiveness>();
       eval_liveness_local<GprSet>(cur, ctx);
       eval_liveness_local<FprSet>(cur, ctx);
+      eval_liveness_local<CrSet>(cur, ctx);
     },
     always_iterate,
     routine._graph->_root);
 
   // Cycle 2: Propagate GPR/FPR liveness guesses to outputs and from inputs iteratively until there are no more changes
-  bool did_change;
-  do {
-    did_change = false;
-    dfs_forward([&did_change](BasicBlock* cur) { did_change |= propagate_guesses<GprSet>(cur); },
+  for (IterState iter_state; !iter_state.done(); iter_state.iterate()) {
+    dfs_forward(
+      [&iter_state](BasicBlock* cur) {
+        if (!iter_state.gpr_done) {
+          iter_state.gpr_changed |= propagate_guesses<GprSet>(cur);
+        }
+        if (!iter_state.fpr_done) {
+          iter_state.fpr_changed |= propagate_guesses<FprSet>(cur);
+        }
+        if (!iter_state.cr_done) {
+          iter_state.cr_changed |= propagate_guesses<CrSet>(cur);
+        }
+      },
       always_iterate,
       routine._graph->_root);
-  } while (did_change);
-  do {
-    did_change = false;
-    dfs_forward([&did_change](BasicBlock* cur) { did_change |= propagate_guesses<FprSet>(cur); },
-      always_iterate,
-      routine._graph->_root);
-  } while (did_change);
+  }
 
   // TODO(optimize): More targeted backpropagation and reverse-DFS
   // Cycle 3: Backpropagate GPR/FPR liveness guesses from outputs and to inputs into
-  do {
-    did_change = false;
-    dfs_forward([&did_change](BasicBlock* cur) { did_change |= backpropagate_outputs<GprSet>(cur); },
+  for (IterState iter_state; !iter_state.done(); iter_state.iterate()) {
+    dfs_forward(
+      [&iter_state](BasicBlock* cur) {
+        if (!iter_state.gpr_done) {
+          iter_state.gpr_changed |= backpropagate_outputs<GprSet>(cur);
+        }
+        if (!iter_state.fpr_done) {
+          iter_state.fpr_changed |= backpropagate_outputs<FprSet>(cur);
+        }
+        if (!iter_state.cr_done) {
+          iter_state.cr_changed |= backpropagate_outputs<CrSet>(cur);
+        }
+      },
       always_iterate,
       routine._graph->_root);
-  } while (did_change);
-  do {
-    did_change = false;
-    dfs_forward([&did_change](BasicBlock* cur) { did_change |= backpropagate_outputs<FprSet>(cur); },
-      always_iterate,
-      routine._graph->_root);
-  } while (did_change);
+  }
 
   // Cycle 4: Clear out regions where a register is effectively dead (see comment in clear_unused_sections)
   dfs_forward(
-    [](BasicBlock* cur) {
-      clear_unused_sections<GprSet>(cur);
-      clear_unused_sections<FprSet>(cur);
+    [&ctx](BasicBlock* cur) {
+      clear_unused_sections<GprSet>(cur, ctx);
+      clear_unused_sections<FprSet>(cur, ctx);
+      clear_unused_sections<CrSet>(cur, ctx);
     },
     always_iterate,
     routine._graph->_root);
@@ -301,6 +343,7 @@ void run_liveness_analysis(Subroutine& routine, BinaryContext const& ctx) {
       find_routine_params<FprSet>(cur);
       routine._gpr_param += cur->_gpr_lifetimes->_routine_inputs;
       routine._fpr_param += cur->_fpr_lifetimes->_routine_inputs;
+      // TODO: Check if CR parameters are some kind of standard
     },
     always_iterate,
     routine._graph->_root);

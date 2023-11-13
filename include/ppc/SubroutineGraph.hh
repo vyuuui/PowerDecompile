@@ -31,6 +31,8 @@ struct BasicBlock {
   uint32_t _block_end;
   uint32_t _block_id;
 
+  bool _terminal_block;
+
   std::vector<std::tuple<IncomingEdgeType, BasicBlock*>> _incoming_edges;
   std::vector<std::tuple<OutgoingEdgeType, BasicBlock*>> _outgoing_edges;
 
@@ -38,6 +40,7 @@ struct BasicBlock {
 
   std::unique_ptr<GprLiveness> _gpr_lifetimes;
   std::unique_ptr<FprLiveness> _fpr_lifetimes;
+  std::unique_ptr<CrLiveness> _cr_lifetimes;
   std::vector<PerilogueInstructionType> _perilogue_types;
 };
 
@@ -65,6 +68,28 @@ struct SubroutineGraph {
     return const_cast<BasicBlock*>(const_cast<SubroutineGraph const*>(this)->block_by_vaddr(vaddr));
   }
 };
+
+template <typename SetType>
+constexpr RegisterLiveness<typename SetType::RegType> const* get_liveness(BasicBlock const* block) {
+  if constexpr (std::is_same_v<SetType, GprSet>) {
+    return block->_gpr_lifetimes.get();
+  } else if constexpr (std::is_same_v<SetType, FprSet>) {
+    return block->_fpr_lifetimes.get();
+  } else if constexpr (std::is_same_v<SetType, CrSet>) {
+    return block->_cr_lifetimes.get();
+  }
+}
+
+template <typename SetType>
+constexpr RegisterLiveness<typename SetType::RegType>* get_liveness(BasicBlock* block) {
+  if constexpr (std::is_same_v<SetType, GprSet>) {
+    return block->_gpr_lifetimes.get();
+  } else if constexpr (std::is_same_v<SetType, FprSet>) {
+    return block->_fpr_lifetimes.get();
+  } else if constexpr (std::is_same_v<SetType, CrSet>) {
+    return block->_cr_lifetimes.get();
+  }
+}
 
 template <bool Forward, typename Visit, typename Iterate, typename... Annotation>
 std::unordered_set<BasicBlock*> dfs_traversal(

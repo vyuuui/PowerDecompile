@@ -56,19 +56,57 @@ enum class IrType : uint8_t {
   kU4,
   kSingle,
   kDouble,
+  kBoolean,
   kInvalid,
 };
 
-enum class TVTable : uint8_t {
-  kGprTable,
-  kFprTable,
-  kCrTable,
-  kSprTable,
+enum class TempClass : uint8_t {
+  kIntegral,
+  kFloating,
+  kCondition,
 };
+
 struct TVRef {
-  TVTable _table : 2;
-  uint32_t _idx : 30;
+  uint32_t _idx;
+  TempClass _class;
   IrType _reftype;
+};
+
+struct ConditionTVRef {
+  uint32_t _idx;
+  TempClass _class;
+  IrType _reftype;
+  uint8_t _condbits;
+};
+
+union TempVar {
+  TVRef _base;
+  ConditionTVRef _cnd;
+
+  static TempVar integral(uint32_t index, IrType reftype) {
+    return TempVar{._base = TVRef{
+                     ._idx = index,
+                     ._class = TempClass::kIntegral,
+                     ._reftype = reftype,
+                   }};
+  }
+
+  static TempVar floating(uint32_t index, IrType reftype) {
+    return TempVar{._base = TVRef{
+                     ._idx = index,
+                     ._class = TempClass::kFloating,
+                     ._reftype = reftype,
+                   }};
+  }
+
+  static TempVar condition(uint32_t index, uint8_t condbits) {
+    return TempVar{._cnd = ConditionTVRef{
+                     ._idx = index,
+                     ._class = TempClass::kCondition,
+                     ._reftype = IrType::kBoolean,
+                     ._condbits = condbits,
+                   }};
+  }
 };
 
 struct MemRef {
@@ -78,10 +116,12 @@ struct MemRef {
 
 struct StackRef {
   int16_t _off;
+  bool _addrof;
 };
 
 struct ParamRef {
   uint32_t _param_idx;
+  bool _addrof;
 };
 
 struct Immediate {
@@ -93,11 +133,7 @@ struct FunctionRef {
   uint32_t _func_va;
 };
 
-struct ConditionRef {
-  uint32_t _bits;
-};
-
-using OpVar = std::variant<TVRef, MemRef, StackRef, ParamRef, Immediate, FunctionRef, ConditionRef>;
+using OpVar = std::variant<TempVar, MemRef, StackRef, ParamRef, Immediate, FunctionRef>;
 
 struct IrInst {
   IrInst(IrOpcode opc) : _opc(opc) {}

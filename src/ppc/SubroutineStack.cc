@@ -66,7 +66,11 @@ void SubroutineStack::analyze_block(BasicBlock const* block) {
                    },
           write);
       if (ref) {
-        all_sp_refs.emplace_back(*ref);
+        if (*ref == SpModify) {
+          analyze_sp_modify(inst);
+        } else {
+          all_sp_refs.emplace_back(*ref);
+        }
       }
     }
 
@@ -85,8 +89,7 @@ void SubroutineStack::analyze_block(BasicBlock const* block) {
           analyze_sp_mem_ref(inst);
           break;
 
-        case SpModify:
-          analyze_sp_modify(inst);
+        default:
           break;
       }
     }

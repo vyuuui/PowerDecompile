@@ -8,25 +8,37 @@
 #include <set>
 
 #include "dbgutil/Disassembler.hh"
+#include "dbgutil/IrPrinter.hh"
 #include "ir/GekkoTranslator.hh"
 #include "ppc/BinaryContext.hh"
 #include "ppc/Perilogue.hh"
 #include "ppc/RegisterLiveness.hh"
 #include "ppc/Subroutine.hh"
+#include "ppc/SubroutineStack.hh"
 #include "producers/DolData.hh"
 #include "utl/LaunchCommand.hh"
 #include "utl/VariantOverloaded.hh"
-#include "ppc/SubroutineStack.hh"
 
 namespace decomp {
 int test_cmd(CommandParamList const& cpl) {
   using namespace ppc;
 
-  BinaryContext ctx = create_raw(0,
-    0,
-    "\x94\x21\xFF\xF0\x93\xE1\x00\x0C\x3B\xE0\x00\x00\x2C\x03\x00\x03\x40\x82\x00\x0C\x3B\xE0\x00\x06\x48\x00\x00\x08"
-    "\x38\x60\x00\x03\x7C\x63\xFA\x14\x83\xE1\x00\x0C\x38\x21\x00\x10\x4E\x80\x00\x20");
+  BinaryContext ctx;
+  {
+    char const* path = "test.elf";
+    std::ifstream file_in(path, std::ios::binary);
+    if (!file_in.is_open()) {
+      std::cerr << fmt::format("Failed to open path {}\n", path);
+      return 1;
+    }
 
+    ErrorOr<BinaryContext> result = create_from_stream(file_in, BinaryType::kELF);
+    if (result.is_error()) {
+      std::cerr << fmt::format("Failed to open path {}, reason: {}\n", path, result.err());
+      return 1;
+    }
+    ctx = std::move(result.val());
+  }
   Subroutine subroutine;
   run_graph_analysis(subroutine, ctx, 0);
 
@@ -44,134 +56,9 @@ int test_cmd(CommandParamList const& cpl) {
     std::cout << "\n";
   }
 
-  int idx = 0;
   for (ir::IrBlock const& block : irg._blocks) {
-    std::cout << fmt::format("IR for block {}\n", idx++);
-    for (ir::IrInst const& inst : block._insts) {
-      std::cout << "    ";
-      switch (inst._opc) {
-        case ir::IrOpcode::kMov:
-          std::cout << "mov";
-          break;
-
-        case ir::IrOpcode::kStore:
-          std::cout << "store";
-          break;
-
-        case ir::IrOpcode::kLoad:
-          std::cout << "load";
-          break;
-
-        case ir::IrOpcode::kCmp:
-          std::cout << "cmp";
-          break;
-
-        case ir::IrOpcode::kRcTest:
-          std::cout << "rcTest";
-          break;
-
-        case ir::IrOpcode::kCall:
-          std::cout << "call";
-          break;
-
-        case ir::IrOpcode::kReturn:
-          std::cout << "return";
-          break;
-
-        case ir::IrOpcode::kLsh:
-          std::cout << "lsh";
-          break;
-
-        case ir::IrOpcode::kRsh:
-          std::cout << "rsh";
-          break;
-
-        case ir::IrOpcode::kRol:
-          std::cout << "rol";
-          break;
-
-        case ir::IrOpcode::kRor:
-          std::cout << "ror";
-          break;
-
-        case ir::IrOpcode::kAndB:
-          std::cout << "andB";
-          break;
-
-        case ir::IrOpcode::kOrB:
-          std::cout << "orB";
-          break;
-
-        case ir::IrOpcode::kXorB:
-          std::cout << "xorB";
-          break;
-
-        case ir::IrOpcode::kNotB:
-          std::cout << "notB";
-          break;
-
-        case ir::IrOpcode::kAdd:
-          std::cout << "add";
-          break;
-
-        case ir::IrOpcode::kAddc:
-          std::cout << "addc";
-          break;
-
-        case ir::IrOpcode::kSub:
-          std::cout << "sub";
-          break;
-
-        case ir::IrOpcode::kMul:
-          std::cout << "mul";
-          break;
-
-        case ir::IrOpcode::kDiv:
-          std::cout << "div";
-          break;
-
-        case ir::IrOpcode::kNeg:
-          std::cout << "neg";
-          break;
-
-        case ir::IrOpcode::kSqrt:
-          std::cout << "sqrt";
-          break;
-
-        case ir::IrOpcode::kAbs:
-          std::cout << "abs";
-          break;
-
-        case ir::IrOpcode::kIntrinsic:
-          std::cout << "intrinsic";
-          break;
-
-        case ir::IrOpcode::kOptBarrier:
-          std::cout << "optBarrier";
-          break;
-      }
-
-      std::cout << " ";
-      for (ir::OpVar ov : inst._ops) {
-        std::visit(overloaded{
-          [](ir::TVRef tv) { std::cout << fmt::format("t{}", static_cast<uint32_t>(tv._idx)); },
-          [](ir::MemRef mr) { std::cout << fmt::format("[t{} + {:x}]", mr._gpr_tv, mr._off); },
-          [](ir::StackRef sr) { std::cout << fmt::format("var_{:x}", sr._off); },
-          [](ir::ParamRef pr) { std::cout << fmt::format("param_{}", pr._param_idx); },
-          [](ir::Immediate imm) {
-            if (imm._signed) {
-              std::cout << fmt::format("{:x}", static_cast<int32_t>(imm._val));
-            } else {
-              std::cout << fmt::format("{:x}", static_cast<uint32_t>(imm._val));
-            }
-          },
-          [](ir::FunctionRef fr) { std::cout << fmt::format("func_{:x}", fr._func_va); },
-          [](ir::ConditionRef cr) { std::cout << fmt::format("crb_{:x}", cr._bits); },
-        }, ov);
-        std::cout << " ";
-      }
-      std::cout << "\n";
-    }
+    write_block(block, std::cout);
+    std::cout << "\n";
   }
   return 0;
 }

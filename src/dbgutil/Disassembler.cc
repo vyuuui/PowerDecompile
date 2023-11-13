@@ -1476,7 +1476,9 @@ std::string readsource_verbose(ReadSource const& src) {
     overloaded{
       [](GPRSlice gpr) -> std::string { return fmt::format("r{}", static_cast<int>(gpr._reg)); },
       [](FPRSlice fpr) -> std::string { return fmt::format("f{}", static_cast<int>(fpr._reg)); },
-      [](CRBit bits) -> std::string { return fmt::format("cr<{:08x}>", static_cast<uint32_t>(bits)); },
+      [](CrSlice bits) -> std::string {
+        return fmt::format("crf{}.{:x}", static_cast<int>(bits._field), static_cast<int>(bits._bits));
+      },
       [](MemRegOff mem) -> std::string { return fmt::format("[r{} + {}]", static_cast<int>(mem._base), mem._offset); },
       [](MemRegReg mem) -> std::string {
         return fmt::format("[r{} + r{}]", static_cast<int>(mem._base), static_cast<int>(mem._offset));
@@ -1498,7 +1500,9 @@ std::string writesource_verbose(WriteSource const& src) {
     overloaded{
       [](GPRSlice gpr) -> std::string { return fmt::format("r{}", static_cast<int>(gpr._reg)); },
       [](FPRSlice fpr) -> std::string { return fmt::format("f{}", static_cast<int>(fpr._reg)); },
-      [](CRBit bits) -> std::string { return fmt::format("cr<{:08x}>", static_cast<uint32_t>(bits)); },
+      [](CrSlice bits) -> std::string {
+        return fmt::format("crf{}.{:x}", static_cast<int>(bits._field), static_cast<int>(bits._bits));
+      },
       [](MemRegOff mem) -> std::string { return fmt::format("[r{} + {}]", static_cast<int>(mem._base), mem._offset); },
       [](MemRegReg mem) -> std::string {
         return fmt::format("[r{} + r{}]", static_cast<int>(mem._base), static_cast<int>(mem._offset));

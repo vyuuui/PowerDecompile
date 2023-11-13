@@ -36,17 +36,17 @@ public:
   // Short relative branch distance
   constexpr RelBranch bd() const { return RelBranch{ext_range_signed(16, 29) << 2}; }
   // Bit to use for conditional branch
-  constexpr CRBit bi() const { return static_cast<CRBit>(1 << ext_range(11, 15)); }
+  constexpr CrSlice bi() const { return CrSlice::from_bitnum(ext_range(11, 15)); }
   // Branch options for conditional branch
   constexpr AuxImm bo() const { return AuxImm{ext_range(6, 10)}; }
 
   // CR bit numbers
-  constexpr CRBit crba() const { return static_cast<CRBit>(1 << ext_range(11, 15)); }
-  constexpr CRBit crbb() const { return static_cast<CRBit>(1 << ext_range(16, 20)); }
-  constexpr CRBit crbd() const { return static_cast<CRBit>(1 << ext_range(6, 10)); }
+  constexpr CrSlice crba() const { return CrSlice::from_bitnum(ext_range(11, 15)); }
+  constexpr CrSlice crbb() const { return CrSlice::from_bitnum(ext_range(16, 20)); }
+  constexpr CrSlice crbd() const { return CrSlice::from_bitnum(ext_range(6, 10)); }
   // CR field numbers
-  constexpr CRBit crfd() const { return static_cast<CRBit>(0b1111u << ext_range(6, 8)); }
-  constexpr CRBit crfs() const { return static_cast<CRBit>(0b1111u << ext_range(11, 13)); }
+  constexpr CrSlice crfd() const { return CrSlice::from_fieldnum(ext_range(6, 8)); }
+  constexpr CrSlice crfs() const { return CrSlice::from_fieldnum(ext_range(11, 13)); }
   // Floating point registers
   constexpr FPR fra() const { return static_cast<FPR>(ext_range(11, 15)); }
   constexpr FPR frb() const { return static_cast<FPR>(ext_range(16, 20)); }
@@ -120,6 +120,9 @@ public:
   constexpr InstFlags lk() const { return ext_range(31, 31) ? InstFlags::kWritesLR : InstFlags::kNone; }
   constexpr InstFlags w() const { return ext_range(21, 21) ? InstFlags::kPsLoadsOne : InstFlags::kNone; }
   constexpr InstFlags l() const { return ext_range(10, 10) ? InstFlags::kLongMode : InstFlags::kNone; }
+  constexpr InstFlags rc_fp() const {
+    return ext_range(31, 31) ? InstFlags::kWritesRecord | InstFlags::kWritesFpRecord : InstFlags::kNone;
+  }
 
   // Partially completed fields
   constexpr int16_t d16() const { return ext_range_signed(16, 31); }
@@ -132,14 +135,14 @@ public:
   constexpr FPSCRBit fpscrfs() const { return static_cast<FPSCRBit>(0b1111u << ext_range(11, 13)); }
 
   // Mask for CR fields
-  CRBit crm() const {
-    CRBit result = CRBit::kNone;
+  AuxImm crm() const {
+    uint32_t ret = 0;
     for (uint32_t i = 0; i < 8; i++) {
       if (ext_range(i + 12, i + 12)) {
-        result = result | static_cast<CRBit>(0b1111u << (4 * i));
+        ret |= 0b1111 << i;
       }
     }
-    return result;
+    return AuxImm{ret};
   }
 
   // Mask for FPSCR fields

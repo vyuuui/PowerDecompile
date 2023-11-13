@@ -2,8 +2,6 @@
 
 #include <cstdint>
 
-#include "ppc/DataSource.hh"
-
 namespace decomp::ppc {
 template <typename T>
 struct RegSet {
@@ -67,36 +65,4 @@ struct RegSet {
   constexpr RegSet operator^(RegSet rhs) const { return _set ^ rhs._set; }
 
 };
-
-using GprSet = RegSet<GPR>;
-using FprSet = RegSet<FPR>;
-
-constexpr GprSet kAllGprs = GprSet(0xffffffff);
-constexpr FprSet kAllFprs = FprSet(0xffffffff);
-
-template <GPR... gprs>
-constexpr GprSet gpr_mask_literal() {
-  return GprSet{(0 | ... | (1 << static_cast<uint8_t>(gprs)))};
-}
-template <FPR... gprs>
-constexpr FprSet fpr_mask_literal() {
-  return FprSet{(0 | ... | (1 << static_cast<uint8_t>(gprs)))};
-}
-template <typename... Ts>
-constexpr GprSet gpr_mask(Ts... args) {
-  return GprSet{(0 | ... | static_cast<uint32_t>(1 << static_cast<uint8_t>(args)))};
-}
-template <typename... Ts>
-constexpr FprSet fpr_mask(Ts... args) {
-  return FprSet{(0 | ... | static_cast<uint32_t>(1 << static_cast<uint8_t>(args)))};
-}
-
-constexpr GprSet gpr_range(GPR start) {
-  GprSet excl = gpr_mask(start)._set - 1;
-  return kAllGprs - excl;
-}
-constexpr FprSet fpr_range(FPR start) {
-  FprSet excl = fpr_mask(start)._set - 1;
-  return kAllFprs - excl;
-}
 }  // namespace decomp::ppc
