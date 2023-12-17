@@ -13,21 +13,29 @@ enum class CounterCheck {
   kCounterNotZero,
 };
 struct BlockTransition {
+  uint32_t _src_idx;
   uint32_t _target_idx;
   std::optional<ConditionTVRef> _cond;
   bool _inv_cond;
   bool _take_if_true;
   CounterCheck _counter;
 
-  BlockTransition(uint32_t target_idx,
+  BlockTransition(uint32_t src_idx,
+    uint32_t target_idx,
     ConditionTVRef cond,
     bool inv_cond,
     bool take_if_true,
     CounterCheck counter = CounterCheck::kIgnore)
-      : _target_idx(target_idx), _cond(cond), _inv_cond(inv_cond), _take_if_true(take_if_true), _counter(counter) {}
+      : _src_idx(src_idx),
+        _target_idx(target_idx),
+        _cond(cond),
+        _inv_cond(inv_cond),
+        _take_if_true(take_if_true),
+        _counter(counter) {}
 
-  BlockTransition(uint32_t target_idx, bool take_if_true, CounterCheck counter = CounterCheck::kIgnore)
-      : _target_idx(target_idx), _inv_cond(false), _take_if_true(take_if_true), _counter(counter) {}
+  BlockTransition(
+    uint32_t src_idx, uint32_t target_idx, bool take_if_true, CounterCheck counter = CounterCheck::kIgnore)
+      : _src_idx(src_idx), _target_idx(target_idx), _inv_cond(false), _take_if_true(take_if_true), _counter(counter) {}
 };
 
 struct IrBlock {
@@ -36,8 +44,9 @@ struct IrBlock {
   std::vector<BlockTransition> _tr_out;
 };
 
-struct IrGraph {
+struct IrRoutine {
   std::vector<IrBlock> _blocks;
+  uint32_t _root_id;
   GPRBindTracker _gpr_binds;
   FPRBindTracker _fpr_binds;
   CRBindTracker _cr_binds;
@@ -47,7 +56,7 @@ struct IrGraph {
   uint8_t _num_int_param;
   uint8_t _num_flt_param;
 
-  IrGraph(ppc::Subroutine const& routine)
+  IrRoutine(ppc::Subroutine const& routine)
       : _gpr_binds(routine), _fpr_binds(routine), _cr_binds(routine), _num_int_param(0), _num_flt_param(0) {
     _blocks.resize(routine._graph->_nodes_by_id.size());
     for (size_t i = 0; i < _blocks.size(); i++) {
@@ -78,5 +87,5 @@ struct IrGraph {
   }
 };
 
-IrGraph translate_subroutine(ppc::Subroutine const& routine);
+IrRoutine translate_subroutine(ppc::Subroutine const& routine);
 }  // namespace decomp::ir

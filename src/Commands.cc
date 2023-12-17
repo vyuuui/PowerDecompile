@@ -10,6 +10,7 @@
 #include "dbgutil/Disassembler.hh"
 #include "dbgutil/IrPrinter.hh"
 #include "ir/GekkoTranslator.hh"
+#include "hll/Function.hh"
 #include "ppc/BinaryContext.hh"
 #include "ppc/Perilogue.hh"
 #include "ppc/RegisterLiveness.hh"
@@ -40,12 +41,12 @@ int test_cmd(CommandParamList const& cpl) {
     ctx = std::move(result.val());
   }
   Subroutine subroutine;
-  run_graph_analysis(subroutine, ctx, 0);
+  run_graph_analysis(subroutine, ctx, 0x10000);
 
   run_liveness_analysis(subroutine, ctx);
   run_stack_analysis(subroutine);
   run_perilogue_analysis(subroutine, ctx);
-  ir::IrGraph irg = ir::translate_subroutine(subroutine);
+  ir::IrRoutine irg = ir::translate_subroutine(subroutine);
 
   for (size_t i = 0; i < irg._gpr_binds.ntemps(); i++) {
     ir::BindInfo<GPR> const* bi = irg._gpr_binds.get_temp(i);
@@ -177,16 +178,8 @@ int summarize_subroutine(CommandParamList const& cpl) {
     }
   }
 
-  for (Loop const& loop : subroutine._graph->_loops) {
-    std::cout << fmt::format("Loop beginning at 0x{:08x} spanning blocks:\n", loop._start->_block_start);
-
-    for (BasicBlock* block : loop._contents) {
-      std::cout << fmt::format("  Block 0x{:08x} -- 0x{:08x}\n", block->_block_start, block->_block_end);
-    }
-  }
-
   run_perilogue_analysis(subroutine, ctx);
-  ir::IrGraph irg = ir::translate_subroutine(subroutine);
+  ir::IrRoutine irg = ir::translate_subroutine(subroutine);
 
   for (size_t i = 0; i < irg._gpr_binds.ntemps(); i++) {
     ir::BindInfo<GPR> const* bi = irg._gpr_binds.get_temp(i);

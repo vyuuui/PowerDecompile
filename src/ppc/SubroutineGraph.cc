@@ -8,61 +8,6 @@
 
 namespace decomp::ppc {
 namespace {
-struct pair_hash {
-  constexpr std::size_t operator()(std::pair<uint32_t, uint32_t> const& v) const { return v.first ^ v.second; }
-};
-using cut_set = std::unordered_set<std::pair<uint32_t, uint32_t>, pair_hash>;
-
-///////////////////////////////
-// Loop construction helpers //
-///////////////////////////////
-// Construct a loop provided its starting node and a list of cut edges to ignore. This should fill out the loop_contents
-// and loop_exits fields
-void construct_loop(Loop& loop, cut_set const& cuts) {
-  std::vector<BasicBlock*> traversal_path;
-  loop._contents.emplace(loop._start);
-
-  dfs_forward(
-    // Visit
-    [&traversal_path, &loop](BasicBlock* cur, int prefix_depth) {
-      traversal_path.resize(prefix_depth);
-      traversal_path.push_back(cur);
-
-      for (auto&& [_, next] : cur->_outgoing_edges) {
-        if (loop._contents.count(next) > 0) {
-          loop._contents.insert(traversal_path.begin(), traversal_path.end());
-          break;
-        }
-      }
-    },
-    // Iterate
-    [&cuts](BasicBlock* next, BasicBlock* cur, int depth) -> std::optional<std::tuple<int>> {
-      if (cuts.count(std::pair<int, int>(cur->_block_id, next->_block_id)) > 0) {
-        return std::nullopt;
-      }
-      return std::tuple<int>(depth + 1);
-    },
-    loop._start,
-    0);
-
-  for (BasicBlock* loop_block : loop._contents) {
-    for (auto&& [_, node] : loop_block->_outgoing_edges) {
-      if (loop._contents.count(node) == 0) {
-        loop._exits.emplace_back(node);
-      }
-    }
-  }
-}
-
-// Returns the future set, ignoring cuts made on edges
-std::unordered_set<BasicBlock*> future_set_with_cuts(BasicBlock* node, cut_set const& cuts) {
-  return dfs_forward([](BasicBlock*) {},
-    [&cuts](BasicBlock* next, BasicBlock* cur) {
-      return cuts.count(std::pair<int, int>(cur->_block_id, next->_block_id)) == 0;
-    },
-    node);
-}
-
 ////////////////////////////////
 // Graph construction helpers //
 ////////////////////////////////
@@ -102,7 +47,6 @@ BasicBlock* split_blocks(BasicBlock* original_block, uint32_t address, Subroutin
 
   return new_block;
 }
-
 }  // namespace
 
 void run_graph_analysis(Subroutine& routine, BinaryContext const& ctx, uint32_t subroutine_start) {
@@ -228,47 +172,6 @@ void run_graph_analysis(Subroutine& routine, BinaryContext const& ctx, uint32_t 
       next->_incoming_edges.emplace_back(IncomingEdgeType::kForwardEdge, cur);
       return true;
     },
-    graph->_root);
-
-  // Loop detection algorithm
-  //   For each node in the graph
-  //   If the node has at least one in edge not in its future set and at least one in edge in its future set
-  //   + Construct a loop starting at this node
-  //   + Make cuts in the graph for each edge that is in the future set of this node
-  cut_set cuts;
-  dfs_forward(
-    // Visit
-    [&graph, &cuts](BasicBlock* cur) {
-      if (cur->_incoming_edges.empty()) {
-        return;
-      }
-
-      std::unordered_set<BasicBlock*> future = future_set_with_cuts(cur, cuts);
-      bool incoming_in_future = false;
-      bool incoming_outside_loop = false;
-
-      for (auto&& [_, node] : cur->_incoming_edges) {
-        if (future.count(node) > 0) {
-          incoming_in_future = true;
-        } else {
-          incoming_outside_loop = true;
-        }
-      }
-
-      if (incoming_in_future && incoming_outside_loop) {
-        construct_loop(graph->_loops.emplace_back(cur), cuts);
-        for (auto&& [edge_type, node] : cur->_incoming_edges) {
-          if (future.count(node) > 0) {
-            // All edges that point back to the loop entry point are backedges
-            edge_type = IncomingEdgeType::kBackEdge;
-            // Cut all backedges to this newly created loop
-            cuts.emplace(node->_block_id, cur->_block_id);
-          }
-        }
-      }
-    },
-    // Iterate
-    always_iterate,
     graph->_root);
 
   // Add all exit points at end

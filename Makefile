@@ -12,12 +12,14 @@ INC_DIR         := include
 
 SRCS            =  $(wildcard $(SRC_DIR)/*.cc)
 SRCS_DBGUTIL    =  $(wildcard $(SRC_DIR)/dbgutil/*.cc)
+SRCS_HLL        =  $(wildcard $(SRC_DIR)/hll/*.cc)
 SRCS_IR         =  $(wildcard $(SRC_DIR)/ir/*.cc)
 SRCS_PPC        =  $(wildcard $(SRC_DIR)/ppc/*.cc)
 SRCS_PRODUCER   =  $(wildcard $(SRC_DIR)/producers/*.cc)
 SRCS_UTL        =  $(wildcard $(SRC_DIR)/utl/*.cc)
 INTER           =  $(patsubst $(SRC_DIR)/%.cc, $(BUILD_DIR)/%.o, $(SRCS))
 INTER_DBGUTIL   =  $(patsubst $(SRC_DIR)/dbgutil/%.cc, $(BUILD_DIR)/dbgutil/%.o, $(SRCS_DBGUTIL))
+INTER_HLL       =  $(patsubst $(SRC_DIR)/hll/%.cc, $(BUILD_DIR)/hll/%.o, $(SRCS_HLL))
 INTER_IR        =  $(patsubst $(SRC_DIR)/ir/%.cc, $(BUILD_DIR)/ir/%.o, $(SRCS_IR))
 INTER_PPC       =  $(patsubst $(SRC_DIR)/ppc/%.cc, $(BUILD_DIR)/ppc/%.o, $(SRCS_PPC))
 INTER_PRODUCER  =  $(patsubst $(SRC_DIR)/producers/%.cc, $(BUILD_DIR)/producers/%.o, $(SRCS_PRODUCER))
@@ -26,7 +28,7 @@ INTER_UTL       =  $(patsubst $(SRC_DIR)/utl/%.cc, $(BUILD_DIR)/utl/%.o, $(SRCS_
 
 all : $(BIN_DIR)/decompile
 
-$(BIN_DIR)/decompile : $(INTER) $(INTER_DBGUTIL) $(INTER_IR) $(INTER_PPC) $(INTER_PRODUCER) $(INTER_UTL)
+$(BIN_DIR)/decompile : $(INTER) $(INTER_DBGUTIL) $(INTER_HLL) $(INTER_IR) $(INTER_PPC) $(INTER_PRODUCER) $(INTER_UTL)
 	@mkdir -p $(@D)
 	$(CC) $(CCFLAGS) $(BASE_LIBS) $^ -o $@
 
@@ -35,6 +37,10 @@ $(BUILD_DIR)/%.o : $(SRC_DIR)/%.cc
 	$(CC) $(CCFLAGS) -I$(INC_DIR) -c $< -o $@
 
 $(BUILD_DIR)/dbgutil/%.o : $(SRC_DIR)/dbgutil/%.cc
+	@mkdir -p $(@D)
+	$(CC) $(CCFLAGS) -I$(INC_DIR) -c $< -o $@
+
+$(BUILD_DIR)/hll/%.o : $(SRC_DIR)/hll/%.cc
 	@mkdir -p $(@D)
 	$(CC) $(CCFLAGS) -I$(INC_DIR) -c $< -o $@
 
@@ -61,6 +67,7 @@ clean :
 
 -include $(INTER:$(BUILD_DIR)/%.o=$(BUILD_DIR)/%.d)
 -include $(INTER_DBGUTIL:$(BUILD_DIR)/dbgutil/%.o=$(BUILD_DIR)/dbgutil/%.d)
+-include $(INTER_HLL:$(BUILD_DIR)/hll/%.o=$(BUILD_DIR)/hll/%.d)
 -include $(INTER_IR:$(BUILD_DIR)/ir/%.o=$(BUILD_DIR)/ir/%.d)
 -include $(INTER_PPC:$(BUILD_DIR)/ppc/%.o=$(BUILD_DIR)/ppc/%.d)
 -include $(INTER_PRODUCER:$(BUILD_DIR)/producers/%.o=$(BUILD_DIR)/producers/%.d)

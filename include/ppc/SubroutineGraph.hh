@@ -44,20 +44,11 @@ struct BasicBlock {
   std::vector<PerilogueInstructionType> _perilogue_types;
 };
 
-struct Loop {
-  BasicBlock* _start;
-  std::unordered_set<BasicBlock*> _contents;
-  std::vector<BasicBlock*> _exits;
-
-  Loop(BasicBlock* start) : _start(start), _exits() {}
-};
-
 struct SubroutineGraph {
   BasicBlock* _root;
   std::vector<BasicBlock*> _nodes_by_id;
   dinterval_tree<BasicBlock*, uint32_t> _nodes_by_range;
   std::vector<BasicBlock*> _exit_points;
-  std::vector<Loop> _loops;
   std::vector<uint32_t> _direct_calls;
 
   BasicBlock const* block_by_vaddr(uint32_t vaddr) const {
@@ -92,8 +83,7 @@ constexpr RegisterLiveness<typename SetType::RegType>* get_liveness(BasicBlock* 
 }
 
 template <bool Forward, typename Visit, typename Iterate, typename... Annotation>
-std::unordered_set<BasicBlock*> dfs_traversal(
-  Visit&& visitor, Iterate&& iterator, BasicBlock* start, Annotation... init_annot) {
+void dfs_traversal(Visit&& visitor, Iterate&& iterator, BasicBlock* start, Annotation... init_annot) {
   using EdgeListType =
     std::conditional_t<Forward, decltype(BasicBlock::_outgoing_edges), decltype(BasicBlock::_incoming_edges)>;
 
@@ -129,20 +119,16 @@ std::unordered_set<BasicBlock*> dfs_traversal(
       }
     }
   }
-
-  return visited;
 }
 
 template <typename Visit, typename Iterate, typename... Annotation>
-std::unordered_set<BasicBlock*> dfs_forward(
-  Visit&& visitor, Iterate&& iterator, BasicBlock* start, Annotation... init_annot) {
-  return dfs_traversal<true>(
+void dfs_forward(Visit&& visitor, Iterate&& iterator, BasicBlock* start, Annotation... init_annot) {
+  dfs_traversal<true>(
     std::forward<Visit>(visitor), std::forward<Iterate>(iterator), start, std::forward<Annotation>(init_annot)...);
 }
 template <typename Visit, typename Iterate, typename... Annotation>
-std::unordered_set<BasicBlock*> dfs_backward(
-  Visit&& visitor, Iterate&& iterator, BasicBlock* start, Annotation... init_annot) {
-  return dfs_traversal<false>(
+void dfs_backward(Visit&& visitor, Iterate&& iterator, BasicBlock* start, Annotation... init_annot) {
+  dfs_traversal<false>(
     std::forward<Visit>(visitor), std::forward<Iterate>(iterator), start, std::forward<Annotation>(init_annot)...);
 }
 

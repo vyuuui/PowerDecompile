@@ -36,10 +36,10 @@ IrType datatype_to_reftype(ppc::DataType dt) {
 }
 
 class GekkoTranslator {
-  IrGraph _graph;
+  IrRoutine _ir_routine;
   IrBlock* _active_blk;
 
-  ppc::Subroutine const& _routine;
+  ppc::Subroutine const& _ppc_routine;
 
 private:
   OpVar translate_op(ppc::ReadSource op, uint32_t va) const;
@@ -73,16 +73,16 @@ private:
   void compute_parameters();
 
 public:
-  GekkoTranslator(ppc::Subroutine const& routine) : _graph(routine), _routine(routine) {}
+  GekkoTranslator(ppc::Subroutine const& routine) : _ir_routine(routine), _ppc_routine(routine) {}
 
   void translate();
-  IrGraph&& move_graph() { return std::move(_graph); }
+  IrRoutine&& move_graph() { return std::move(_ir_routine); }
 };
 
 template <typename SetType>
 void GekkoTranslator::compute_block_binds(ppc::BasicBlock const& block) {
   using RegType = typename SetType::RegType;
-  auto& bind_tracker = _graph.get_binds<SetType>();
+  auto& bind_tracker = _ir_routine.get_binds<SetType>();
   auto const* lt = ppc::get_liveness<SetType>(&block);
   SetType connect_in = lt->_input;
   SetType param_in = lt->_routine_inputs;
@@ -92,6 +92,7 @@ void GekkoTranslator::compute_block_binds(ppc::BasicBlock const& block) {
   for (size_t i = 0; i < lt->_live_in.size(); i++) {
     const uint32_t cur_addr = block._block_start + 4 * i;
     SetType delta_reg = lt->_live_in[i] ^ lt->_live_out[i];
+    SetType unused = lt->_def[i] - (lt->_live_in[i] + lt->_live_out[i]);
     while (delta_reg) {
       RegType ref_reg = static_cast<RegType>(__builtin_ctz(delta_reg._set));
       delta_reg -= ref_reg;
@@ -110,6 +111,15 @@ void GekkoTranslator::compute_block_binds(ppc::BasicBlock const& block) {
       } else {
         rgn_begin[static_cast<uint8_t>(ref_reg)] = cur_addr;
       }
+    }
+
+    while (unused) {
+      RegType ref_reg = static_cast<RegType>(__builtin_ctz(unused._set));
+      unused -= ref_reg;
+      if (std::get<SetType>(ppc::kRegSets._abi_regs).in_set(ref_reg)) {
+        continue;
+      }
+      bind_tracker.add_block_bind(ref_reg, false, false, cur_addr, cur_addr + 4);
     }
   }
 
@@ -137,26 +147,26 @@ void GekkoTranslator::compute_block_binds(ppc::BasicBlock const& block) {
 OpVar GekkoTranslator::translate_op(ppc::ReadSource op, uint32_t va) const {
   if (auto* gpr = std::get_if<ppc::GPRSlice>(&op); gpr != nullptr) {
     // TODO: signedness?
-    GPRBindInfo const* gprb = _graph._gpr_binds.query_temp(va, gpr->_reg);
+    GPRBindInfo const* gprb = _ir_routine._gpr_binds.query_temp(va, gpr->_reg);
     if (gprb->_is_param) {
-      return ParamRef{_graph.param_idx(gprb), false};
+      return ParamRef{_ir_routine.param_idx(gprb), false};
     }
     return TempVar::integral(gprb->_num, datatype_to_reftype(gpr->_type));
   } else if (auto* fpr = std::get_if<ppc::FPRSlice>(&op); fpr != nullptr) {
   } else if (auto* cr = std::get_if<ppc::CrSlice>(&op); cr != nullptr) {
-    CRBindInfo const* crb = _graph._cr_binds.query_temp(va, cr->_field);
+    CRBindInfo const* crb = _ir_routine._cr_binds.query_temp(va, cr->_field);
     return TempVar::condition(crb->_num, cr->_bits);
   } else if (auto* mem = std::get_if<ppc::MemRegOff>(&op); mem != nullptr) {
     if (mem->_base == ppc::GPR::kR1) {
-      if (_routine._stack->variable_for_offset(mem->_offset)->_is_param) {
-        return ParamRef{_graph.param_idx(mem->_offset), false};
+      if (_ppc_routine._stack->variable_for_offset(mem->_offset)->_is_param) {
+        return ParamRef{_ir_routine.param_idx(mem->_offset), false};
       } else {
         return StackRef{mem->_offset, false};
       }
     } else if (mem->_base == ppc::GPR::kR2) {
       // TODO: read RTOC
     } else {
-      GPRBindInfo const* gprb = _graph._gpr_binds.query_temp(va, mem->_base);
+      GPRBindInfo const* gprb = _ir_routine._gpr_binds.query_temp(va, mem->_base);
       return MemRef{gprb->_num, mem->_offset};
     }
   } else if (auto* mem = std::get_if<ppc::MemRegReg>(&op); mem != nullptr) {
@@ -175,26 +185,26 @@ OpVar GekkoTranslator::translate_op(ppc::ReadSource op, uint32_t va) const {
 
 OpVar GekkoTranslator::translate_op(ppc::WriteSource op, uint32_t va) const {
   if (auto* gpr = std::get_if<ppc::GPRSlice>(&op); gpr != nullptr) {
-    GPRBindInfo const* gprb = _graph._gpr_binds.query_temp(va, gpr->_reg);
+    GPRBindInfo const* gprb = _ir_routine._gpr_binds.query_temp(va, gpr->_reg);
     if (gprb->_is_param) {
-      return ParamRef{_graph.param_idx(gprb), false};
+      return ParamRef{_ir_routine.param_idx(gprb), false};
     }
     return TempVar::integral(gprb->_num, datatype_to_reftype(gpr->_type));
   } else if (auto* fpr = std::get_if<ppc::FPRSlice>(&op); fpr != nullptr) {
   } else if (auto* cr = std::get_if<ppc::CrSlice>(&op); cr != nullptr) {
-    CRBindInfo const* crb = _graph._cr_binds.query_temp(va, cr->_field);
+    CRBindInfo const* crb = _ir_routine._cr_binds.query_temp(va, cr->_field);
     return TempVar::condition(crb->_num, cr->_bits);
   } else if (auto* mem = std::get_if<ppc::MemRegOff>(&op); mem != nullptr) {
     if (mem->_base == ppc::GPR::kR1) {
-      if (_routine._stack->variable_for_offset(mem->_offset)->_is_param) {
-        return ParamRef{_graph.param_idx(mem->_offset), false};
+      if (_ppc_routine._stack->variable_for_offset(mem->_offset)->_is_param) {
+        return ParamRef{_ir_routine.param_idx(mem->_offset), false};
       } else {
         return StackRef{mem->_offset, false};
       }
     } else if (mem->_base == ppc::GPR::kR2) {
       // TODO: read RTOC
     } else {
-      GPRBindInfo const* gprb = _graph._gpr_binds.query_temp(va, mem->_base);
+      GPRBindInfo const* gprb = _ir_routine._gpr_binds.query_temp(va, mem->_base);
       return MemRef{gprb->_num, mem->_offset};
     }
   } else if (auto* mem = std::get_if<ppc::MemRegReg>(&op); mem != nullptr) {
@@ -232,10 +242,10 @@ void GekkoTranslator::translate_addi(IrOpcode type, ppc::MetaInst const& inst) {
     OpVar dst = translate_op(inst._writes[0], inst._va);
     _active_blk->_insts.emplace_back(IrOpcode::kMov, dst, src);
   } else if (std::get<ppc::GPRSlice>(inst._reads[0])._reg == ppc::GPR::kR1) {
-    auto var = _routine._stack->variable_for_offset(std::get<ppc::SIMM>(inst._reads[1])._imm_value);
+    auto var = _ppc_routine._stack->variable_for_offset(std::get<ppc::SIMM>(inst._reads[1])._imm_value);
     OpVar dst = translate_op(inst._writes[0], inst._va);
     if (var->_is_param) {
-      _active_blk->_insts.emplace_back(IrOpcode::kMov, dst, ParamRef{_graph.param_idx(var->_offset), true});
+      _active_blk->_insts.emplace_back(IrOpcode::kMov, dst, ParamRef{_ir_routine.param_idx(var->_offset), true});
     } else {
       _active_blk->_insts.emplace_back(IrOpcode::kMov, dst, StackRef{var->_offset, true});
     }
@@ -316,8 +326,8 @@ void GekkoTranslator::translate_branch_ctr(ppc::MetaInst const& inst) {
 
 void GekkoTranslator::translate_branch_lr(ppc::MetaInst const& inst) {
   if (inst.is_blr()) {
-    auto ret_lo = _graph._gpr_binds.query_temp(inst._va, ppc::GPR::kR3);
-    auto ret_hi = _graph._gpr_binds.query_temp(inst._va, ppc::GPR::kR4);
+    auto ret_lo = _ir_routine._gpr_binds.query_temp(inst._va, ppc::GPR::kR3);
+    auto ret_hi = _ir_routine._gpr_binds.query_temp(inst._va, ppc::GPR::kR4);
     if (ret_lo != nullptr && ret_hi != nullptr) {
       _active_blk->_insts.emplace_back(IrOpcode::kReturn,
         TempVar::integral(ret_lo->_num, ret_lo->_type),
@@ -379,10 +389,20 @@ void GekkoTranslator::translate_ppc_inst(ppc::MetaInst const& inst) {
     case ppc::InstOperation::kDivwu:
     case ppc::InstOperation::kMulhw:
     case ppc::InstOperation::kMulhwu:
+      break;
+
     case ppc::InstOperation::kMulli:
     case ppc::InstOperation::kMullw:
+      translate_oerc(inst, translate_dss_wrr(IrOpcode::kMul, inst)._ops[0]);
+      break;
+
     case ppc::InstOperation::kNeg:
+      break;
+
     case ppc::InstOperation::kSubf:
+      translate_oerc(inst, translate_dss_wrr(IrOpcode::kSub, inst)._ops[0]);
+      break;
+
     case ppc::InstOperation::kSubfc:
     case ppc::InstOperation::kSubfe:
     case ppc::InstOperation::kSubfic:
@@ -644,7 +664,7 @@ void GekkoTranslator::translate_block_transfer(
   switch (etype) {
     case ppc::OutgoingEdgeType::kUnconditional:
     case ppc::OutgoingEdgeType::kFallthrough:
-      _active_blk->_tr_out.emplace_back(to->_block_id, true);
+      _active_blk->_tr_out.emplace_back(from->_block_id, to->_block_id, true);
       break;
 
     case ppc::OutgoingEdgeType::kConditionTrue:
@@ -715,28 +735,28 @@ void GekkoTranslator::translate_conditional_transfer(ppc::BasicBlock const* to, 
 }
 
 void GekkoTranslator::compute_parameters() {
-  for (size_t i = 0; i < _graph._gpr_binds.ntemps(); i++) {
-    auto tmp = _graph._gpr_binds.get_temp(i);
+  for (size_t i = 0; i < _ir_routine._gpr_binds.ntemps(); i++) {
+    auto tmp = _ir_routine._gpr_binds.get_temp(i);
     if (tmp->_is_param) {
       uint8_t param_idx = static_cast<uint8_t>(tmp->_reg) - 3;
-      _graph._int_param[param_idx] = tmp->_num;
-      _graph._num_int_param = std::max(_graph._num_int_param, static_cast<uint8_t>(param_idx + 1));
+      _ir_routine._int_param[param_idx] = tmp->_num;
+      _ir_routine._num_int_param = std::max(_ir_routine._num_int_param, static_cast<uint8_t>(param_idx + 1));
     }
   }
 
-  for (size_t i = 0; i < _graph._fpr_binds.ntemps(); i++) {
-    auto tmp = _graph._fpr_binds.get_temp(i);
+  for (size_t i = 0; i < _ir_routine._fpr_binds.ntemps(); i++) {
+    auto tmp = _ir_routine._fpr_binds.get_temp(i);
     if (tmp->_is_param) {
       uint8_t param_idx = static_cast<uint8_t>(tmp->_reg) - 1;
-      _graph._flt_param[param_idx] = tmp->_num;
-      _graph._num_flt_param = std::max(_graph._num_flt_param, static_cast<uint8_t>(param_idx + 1));
+      _ir_routine._flt_param[param_idx] = tmp->_num;
+      _ir_routine._num_flt_param = std::max(_ir_routine._num_flt_param, static_cast<uint8_t>(param_idx + 1));
     }
   }
 
-  for (ppc::StackVariable const& var : _routine._stack->param_list()) {
-    _graph._stk_params.emplace_back(var._offset);
+  for (ppc::StackVariable const& var : _ppc_routine._stack->param_list()) {
+    _ir_routine._stk_params.emplace_back(var._offset);
   }
-  std::sort(_graph._stk_params.begin(), _graph._stk_params.end());
+  std::sort(_ir_routine._stk_params.begin(), _ir_routine._stk_params.end());
 }
 
 void GekkoTranslator::translate() {
@@ -747,16 +767,16 @@ void GekkoTranslator::translate() {
       compute_block_binds<ppc::CrSet>(*cur);
     },
     ppc::always_iterate,
-    _routine._graph->_root);
-  _graph._gpr_binds.collect_block_scope_temps();
-  _graph._fpr_binds.collect_block_scope_temps();
-  _graph._cr_binds.collect_block_scope_temps();
+    _ppc_routine._graph->_root);
+  _ir_routine._gpr_binds.collect_block_scope_temps();
+  _ir_routine._fpr_binds.collect_block_scope_temps();
+  _ir_routine._cr_binds.collect_block_scope_temps();
 
   compute_parameters();
 
   ppc::dfs_forward(
     [this](ppc::BasicBlock const* cur) {
-      _active_blk = &_graph._blocks[cur->_block_id];
+      _active_blk = &_ir_routine._blocks[cur->_block_id];
       for (size_t i = 0; i < cur->_instructions.size(); i++) {
         if (cur->_perilogue_types[i] == ppc::PerilogueInstructionType::kNormalInst) {
           translate_ppc_inst(cur->_instructions[i]);
@@ -767,11 +787,12 @@ void GekkoTranslator::translate() {
       }
     },
     ppc::always_iterate,
-    _routine._graph->_root);
+    _ppc_routine._graph->_root);
+  _ir_routine._root_id = _ir_routine._blocks[_ppc_routine._graph->_root->_block_id]._id;
 }
 }  // namespace
 
-IrGraph translate_subroutine(ppc::Subroutine const& routine) {
+IrRoutine translate_subroutine(ppc::Subroutine const& routine) {
   GekkoTranslator tr(routine);
   tr.translate();
 
