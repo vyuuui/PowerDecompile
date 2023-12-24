@@ -42,6 +42,7 @@ struct IrBlock {
   uint32_t _id;
   std::vector<IrInst> _insts;
   std::vector<BlockTransition> _tr_out;
+  std::vector<int> _tr_in;
 };
 
 struct IrRoutine {

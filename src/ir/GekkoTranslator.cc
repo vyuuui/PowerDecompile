@@ -67,7 +67,7 @@ private:
 
   void translate_ppc_inst(ppc::MetaInst const& inst);
   void translate_block_transfer(ppc::BasicBlock const* from, ppc::BasicBlock const* to, ppc::OutgoingEdgeType etype);
-  void translate_conditional_transfer(ppc::BasicBlock const* to, ppc::MetaInst const& inst, bool invert);
+  void translate_conditional_transfer(ppc::BasicBlock const* to, ppc::BasicBlock const* from, bool invert);
   template <typename SetType>
   void compute_block_binds(ppc::BasicBlock const& block);
   void compute_parameters();
@@ -668,58 +668,64 @@ void GekkoTranslator::translate_block_transfer(
       break;
 
     case ppc::OutgoingEdgeType::kConditionTrue:
-      translate_conditional_transfer(to, from->_instructions.back(), true);
+      translate_conditional_transfer(to, from, true);
       break;
 
     case ppc::OutgoingEdgeType::kConditionFalse:
-      translate_conditional_transfer(to, from->_instructions.back(), false);
+      translate_conditional_transfer(to, from, false);
       break;
   }
 }
 
-void GekkoTranslator::translate_conditional_transfer(ppc::BasicBlock const* to, ppc::MetaInst const& inst, bool taken) {
+void GekkoTranslator::translate_conditional_transfer(
+  ppc::BasicBlock const* to, ppc::BasicBlock const* from, bool taken) {
+  ppc::MetaInst const& inst = from->_instructions.back();
   if (inst._op == ppc::InstOperation::kBc) {
     TempVar var = std::get<TempVar>(translate_op(inst._reads[0], inst._va));
     assert(var._base._class == TempClass::kCondition);
 
     switch (ppc::bo_type_from_imm(inst._binst.bo())) {
       case ppc::BOType::kT:
-        _active_blk->_tr_out.emplace_back(to->_block_id, var._cnd, false, taken);
+        _active_blk->_tr_out.emplace_back(to->_block_id, from->_block_id, var._cnd, false, taken);
         break;
 
       case ppc::BOType::kF:
-        _active_blk->_tr_out.emplace_back(to->_block_id, var._cnd, true, taken);
+        _active_blk->_tr_out.emplace_back(to->_block_id, from->_block_id, var._cnd, true, taken);
         break;
 
       case ppc::BOType::kAlways:
         // No fallthrough case here
         if (taken) {
-          _active_blk->_tr_out.emplace_back(to->_block_id, true);
+          _active_blk->_tr_out.emplace_back(to->_block_id, from->_block_id, true);
         }
         break;
 
       case ppc::BOType::kDz:
-        _active_blk->_tr_out.emplace_back(to->_block_id, taken, CounterCheck::kCounterZero);
+        _active_blk->_tr_out.emplace_back(to->_block_id, from->_block_id, taken, CounterCheck::kCounterZero);
         break;
 
       case ppc::BOType::kDnz:
-        _active_blk->_tr_out.emplace_back(to->_block_id, taken, CounterCheck::kCounterNotZero);
+        _active_blk->_tr_out.emplace_back(to->_block_id, from->_block_id, taken, CounterCheck::kCounterNotZero);
         break;
 
       case ppc::BOType::kDzt:
-        _active_blk->_tr_out.emplace_back(to->_block_id, var._cnd, false, taken, CounterCheck::kCounterZero);
+        _active_blk->_tr_out.emplace_back(
+          to->_block_id, from->_block_id, var._cnd, false, taken, CounterCheck::kCounterZero);
         break;
 
       case ppc::BOType::kDzf:
-        _active_blk->_tr_out.emplace_back(to->_block_id, var._cnd, true, taken, CounterCheck::kCounterZero);
+        _active_blk->_tr_out.emplace_back(
+          to->_block_id, from->_block_id, var._cnd, true, taken, CounterCheck::kCounterZero);
         break;
 
       case ppc::BOType::kDnzt:
-        _active_blk->_tr_out.emplace_back(to->_block_id, var._cnd, false, taken, CounterCheck::kCounterNotZero);
+        _active_blk->_tr_out.emplace_back(
+          to->_block_id, from->_block_id, var._cnd, false, taken, CounterCheck::kCounterNotZero);
         break;
 
       case ppc::BOType::kDnzf:
-        _active_blk->_tr_out.emplace_back(to->_block_id, var._cnd, true, taken, CounterCheck::kCounterNotZero);
+        _active_blk->_tr_out.emplace_back(
+          to->_block_id, from->_block_id, var._cnd, true, taken, CounterCheck::kCounterNotZero);
         break;
 
       default:
@@ -789,6 +795,13 @@ void GekkoTranslator::translate() {
     ppc::always_iterate,
     _ppc_routine._graph->_root);
   _ir_routine._root_id = _ir_routine._blocks[_ppc_routine._graph->_root->_block_id]._id;
+
+  // Connect reverse-edges
+  for (IrBlock& blk : _ir_routine._blocks) {
+    for (BlockTransition const& fedge : blk._tr_out) {
+      _ir_routine._blocks[fedge._target_idx]._tr_in.push_back(blk._id);
+    }
+  }
 }
 }  // namespace
 
