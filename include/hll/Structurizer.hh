@@ -1,0 +1,122 @@
+#pragma once
+
+#include "ir/GekkoTranslator.hh"
+
+namespace decomp::hll {
+struct AbstractControlNode;
+
+struct HLLControlTree {
+  AbstractControlNode* _root;
+};
+
+// Generic control flow structurizer, transforms an IrGraph into a structured AST
+class ControlFlowStructurizer {
+public:
+  virtual HLLControlTree structurize() = 0;
+
+  // This is called by run_control_flow_analysis
+  void prepare(ir::IrRoutine const& routine);
+
+protected:
+  // IR Graph to structurize
+  ir::IrRoutine const* _routine;
+  // Initial node set
+  std::vector<AbstractControlNode*> _leaves;
+
+  // Immediate Dominator tree, _idom[i] = j => j idom i
+  std::vector<int> _idom_tree;
+  // Immediate Post-Dominator tree, _ipdom[i] = j => j pdom i
+  std::vector<int> _ipdom_tree;
+};
+
+enum class ACNType {
+  Basic,
+  Seq,
+  If,
+  IfElse,
+  IfElseIf,
+  Switch,
+  DoWhile,
+  While,
+  For,
+  Goto,
+};
+
+struct AbstractControlNode {
+  AbstractControlNode(ACNType type) : _type(type) {}
+  ACNType _type;
+};
+
+template <ACNType NT>
+struct StaticTypedACN : AbstractControlNode {
+  StaticTypedACN() : AbstractControlNode(NT) {}
+  inline static constexpr ACNType kStaticType = NT;
+};
+
+// Wrapper for IR blocks, leaves of AST
+struct BasicBlock : StaticTypedACN<ACNType::Basic> {
+  BasicBlock(ir::IrBlockVertex const& irb) : _irb(irb) {}
+  ir::IrBlockVertex const& _irb;
+
+  constexpr ir::IrBlockVertex const& operator*() const {
+    return _irb;
+  }
+
+  constexpr ir::IrBlockVertex const* operator->() const {
+    return &_irb;
+  }
+};
+
+// Sequence of abstract nodes
+struct Seq : StaticTypedACN<ACNType::Seq> {
+  std::vector<AbstractControlNode*> _seq;
+};
+
+// If-sans-else schema
+struct If : StaticTypedACN<ACNType::If> {
+  AbstractControlNode* _head;
+  AbstractControlNode* _true;
+};
+
+// If-else schema
+struct IfElse : StaticTypedACN<ACNType::IfElse> {
+  AbstractControlNode* _head;
+  AbstractControlNode* _true;
+  AbstractControlNode* _false;
+};
+
+// If-elseif-else schema
+struct IfElseIf : StaticTypedACN<ACNType::IfElseIf> {
+  std::vector<std::pair<AbstractControlNode*, AbstractControlNode*>> _conds;
+  std::optional<AbstractControlNode*> _fallthrough;
+};
+
+// Switch schema
+struct Switch : StaticTypedACN<ACNType::Switch> {
+  AbstractControlNode* _head;
+  std::vector<std::pair<int, AbstractControlNode*>> _cases;
+};
+
+// Do-while schema
+struct DoWhile : StaticTypedACN<ACNType::DoWhile> {
+  AbstractControlNode* _body;
+  AbstractControlNode* _cond;
+};
+
+// While schema
+struct While : StaticTypedACN<ACNType::While> {
+  AbstractControlNode* _cond;
+  AbstractControlNode* _body;
+};
+
+// For schema
+struct For : StaticTypedACN<ACNType::For> {
+  AbstractControlNode* _init;
+  AbstractControlNode* _cond;
+  AbstractControlNode* _body;
+  AbstractControlNode* _it;
+};
+
+// TODO: remove structurizer parameter, refer to it from global options perhaps?
+HLLControlTree run_control_flow_analysis(ControlFlowStructurizer* structurizer, ir::IrRoutine const& routine);
+}  // namespace decomp::hll

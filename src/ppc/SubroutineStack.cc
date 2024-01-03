@@ -38,9 +38,9 @@ TypeSet convert_data_type(DataType type) {
 
 bool SubroutineStack::in_param_region(int16_t offset) const { return offset > _stack_size + 4; }
 
-void SubroutineStack::analyze_block(BasicBlock const* block) {
+void SubroutineStack::analyze_block(BasicBlock const& block) {
   enum SPReferenceType { Write, Read, Reference, SpModify };
-  for (MetaInst const& inst : block->_instructions) {
+  for (MetaInst const& inst : block._instructions) {
     // There can't be more than 3 references to a register in a single instruction
     reserved_vector<SPReferenceType, 3> all_sp_refs;
 
@@ -155,7 +155,7 @@ void SubroutineStack::analyze_sp_modify(MetaInst const& inst) {
 }
 
 void SubroutineStack::analyze(SubroutineGraph const& graph) {
-  dfs_forward([this](BasicBlock const* cur) { analyze_block(cur); }, always_iterate, graph._root);
+  graph.foreach_real([this](BasicBlockVertex const& bbv) { analyze_block(bbv.data()); });
 }
 
 StackVariable const* SubroutineStack::variable_for_offset(int16_t offset) const {

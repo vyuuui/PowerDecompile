@@ -21,6 +21,22 @@
 #include "utl/VariantOverloaded.hh"
 
 namespace decomp {
+namespace {
+char const* color_for_type(BlockTransfer type) {
+  switch (type) {
+    case BlockTransfer::kUnconditional:
+    case BlockTransfer::kFallthrough:
+      return "blue";
+    case BlockTransfer::kConditionTrue:
+      return "green";
+    case BlockTransfer::kConditionFalse:
+      return "red";
+    default:
+      return "black";
+  }
+}
+}
+
 int test_cmd(CommandParamList const& cpl) {
   using namespace ppc;
 
@@ -46,10 +62,10 @@ int test_cmd(CommandParamList const& cpl) {
   run_liveness_analysis(subroutine, ctx);
   run_stack_analysis(subroutine);
   run_perilogue_analysis(subroutine, ctx);
-  ir::IrRoutine irg = ir::translate_subroutine(subroutine);
+  ir::IrRoutine irr = ir::translate_subroutine(subroutine);
 
-  for (size_t i = 0; i < irg._gpr_binds.ntemps(); i++) {
-    ir::BindInfo<GPR> const* bi = irg._gpr_binds.get_temp(i);
+  for (size_t i = 0; i < irr._gpr_binds.ntemps(); i++) {
+    ir::BindInfo<GPR> const* bi = irr._gpr_binds.get_temp(i);
     std::cout << fmt::format("Bind t{} on gpr r{} over range(s):", bi->_num, static_cast<uint8_t>(bi->_reg));
     for (auto const& [lo, hi] : bi->_rgns) {
       std::cout << fmt::format("[{:x}-{:x}] ", lo, hi);
@@ -57,7 +73,7 @@ int test_cmd(CommandParamList const& cpl) {
     std::cout << "\n";
   }
 
-  for (ir::IrBlock const& block : irg._blocks) {
+  for (ir::IrBlockVertex const& block : irr._graph) {
     write_block(block, std::cout);
     std::cout << "\n";
   }
@@ -135,20 +151,11 @@ int summarize_subroutine(CommandParamList const& cpl) {
     }
   }
 
-  std::vector<BasicBlock*> next;
-  std::set<BasicBlock*> visited;
-  next.push_back(subroutine._graph->_root);
-  while (!next.empty()) {
-    BasicBlock* cur = next.back();
-    next.pop_back();
-    if (visited.count(cur) > 0) {
-      continue;
-    }
+  subroutine._graph->foreach_real([](BasicBlockVertex& bbv) {
+    ppc::BasicBlock const& block = bbv.data();
+    std::cout << fmt::format("Block 0x{:08x} -- 0x{:08x}\n", block._block_start, block._block_end);
 
-    visited.emplace(cur);
-    std::cout << fmt::format("Block 0x{:08x} -- 0x{:08x}\n", cur->_block_start, cur->_block_end);
-
-    GprLiveness* rlt = cur->_gpr_lifetimes.get();
+    GprLiveness* rlt = block._gpr_lifetimes.get();
     std::cout << "  Input regs: ";
     for (uint32_t i = 0; i < 32; i++) {
       if (rlt->_input.in_set(static_cast<GPR>(i))) {
@@ -169,14 +176,7 @@ int summarize_subroutine(CommandParamList const& cpl) {
       }
     }
     std::cout << "\n";
-
-    for (auto& pair : cur->_outgoing_edges) {
-      BasicBlock* out = std::get<1>(pair);
-      if (visited.count(out) == 0) {
-        next.push_back(out);
-      }
-    }
-  }
+  });
 
   run_perilogue_analysis(subroutine, ctx);
   ir::IrRoutine irg = ir::translate_subroutine(subroutine);
@@ -224,44 +224,31 @@ int dump_dotfile(CommandParamList const& cpl) {
   }
 
   dotfile_out << fmt::format("digraph sub_{:08x} {{\n  graph [splines=ortho]\n  {{\n", analysis_start);
-  for (BasicBlock* block : subroutine._graph->_nodes_by_id) {
+  subroutine._graph->foreach_real([&dotfile_out](BasicBlockVertex& bbv) {
+    BasicBlock const& block = bbv.data();
     dotfile_out << fmt::format(
-      "    n{} [fontname=\"Courier New\" shape=\"box\" label=\"loc_{:08x}\\l", block->_block_id, block->_block_start);
+      "    n{} [fontname=\"Courier New\" shape=\"box\" label=\"loc_{:08x}\\l", bbv._idx, block._block_start);
     uint32_t i = 0;
-    for (auto& inst : block->_instructions) {
-      dotfile_out << fmt::format("{:08x}  ", block->_block_start + 4 * i);
+    for (auto& inst : block._instructions) {
+      dotfile_out << fmt::format("{:08x}  ", block._block_start + 4 * i);
       write_inst_disassembly(inst, dotfile_out);
       dotfile_out << "\\l";
       i++;
     }
     dotfile_out << "\"]\n";
-  }
+  });
   dotfile_out << "  }\n";
 
-  constexpr auto color_for_type = [](OutgoingEdgeType type) -> char const* {
-    switch (type) {
-      case OutgoingEdgeType::kUnconditional:
-      case OutgoingEdgeType::kFallthrough:
-        return "blue";
-      case OutgoingEdgeType::kConditionTrue:
-        return "green";
-      case OutgoingEdgeType::kConditionFalse:
-        return "red";
-      default:
-        return "black";
-    }
-  };
-
-  for (BasicBlock* block : subroutine._graph->_nodes_by_id) {
-    if (block->_outgoing_edges.empty()) {
-      continue;
+  subroutine._graph->foreach_real([&dotfile_out](BasicBlockVertex& bbv) {
+    if (bbv._out.empty()) {
+      return;
     }
 
-    for (auto&& [edge_type, next] : block->_outgoing_edges) {
+    for (auto [target, rule] : bbv._out) {
       dotfile_out << fmt::format(
-        "  n{} -> n{} [color=\"{}\"]\n", block->_block_id, next->_block_id, color_for_type(edge_type));
+        "  n{} -> n{} [color=\"{}\"]\n", bbv._idx, target, color_for_type(static_cast<BlockTransfer>(rule)));
     }
-  }
+  });
 
   dotfile_out << "}\n";
   dotfile_out.close();

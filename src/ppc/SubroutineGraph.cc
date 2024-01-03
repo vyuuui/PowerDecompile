@@ -11,41 +11,23 @@ namespace {
 ////////////////////////////////
 // Graph construction helpers //
 ////////////////////////////////
-BasicBlock* at_block_head(std::vector<BasicBlock*>& blocks, uint32_t address) {
-  for (BasicBlock* block : blocks) {
-    if (address == block->_block_start) {
-      return block;
-    }
-  }
-
-  return nullptr;
+BasicBlockVertex* at_block_head(SubroutineGraph* graph, uint32_t address) {
+  return graph->find_real([address](BasicBlockVertex& vert) { return address == vert.data()._block_start; });
 }
 
-BasicBlock* contained_in_block(std::vector<BasicBlock*>& blocks, uint32_t address) {
-  for (BasicBlock* block : blocks) {
-    if (address > block->_block_start && address < block->_block_end) {
-      return block;
-    }
-  }
-
-  return nullptr;
+BasicBlockVertex* contained_in_block(SubroutineGraph* graph, uint32_t address) {
+  return graph->find_real([address](BasicBlockVertex& vert) {
+    return address > vert.data()._block_start && address < vert.data()._block_end;
+  });
 }
 
-BasicBlock* split_blocks(BasicBlock* original_block, uint32_t address, SubroutineGraph& graph) {
-  BasicBlock* new_block = new BasicBlock();
-  new_block->_block_start = address;
-  new_block->_block_end = original_block->_block_end;
-  new_block->_block_id = static_cast<uint32_t>(graph._nodes_by_id.size());
-  new_block->_terminal_block = original_block->_terminal_block;
-  graph._nodes_by_id.push_back(new_block);
-
+BasicBlockVertex* split_blocks(BasicBlockVertex* original_block, uint32_t address, SubroutineGraph& graph) {
   // Original block is on top
-  new_block->_outgoing_edges = std::move(original_block->_outgoing_edges);
-  original_block->_outgoing_edges.push_back({OutgoingEdgeType::kFallthrough, new_block});
-  original_block->_block_end = address;
-  original_block->_terminal_block = false;
+  int new_block = graph.insert_after(
+    original_block, BasicBlock(address, original_block->data()._block_end), BlockTransfer::kFallthrough);
+  original_block->data()._block_end = address;
 
-  return new_block;
+  return graph.vertex(new_block);
 }
 }  // namespace
 
@@ -53,59 +35,51 @@ void run_graph_analysis(Subroutine& routine, BinaryContext const& ctx, uint32_t 
   RandomAccessData const& ram = *ctx._ram;
 
   std::unique_ptr<SubroutineGraph> graph = std::make_unique<SubroutineGraph>();
-  BasicBlock* start = new BasicBlock();
-  start->_block_start = subroutine_start;
-  start->_block_id = 0;
+  BasicBlockVertex* start = graph->vertex(graph->emplace_vertex(subroutine_start, subroutine_start + 4));
 
-  graph->_root = start;
-  graph->_nodes_by_id.push_back(start);
+  graph->emplace_link(graph->root(), start, BlockTransfer::kFallthrough);
 
-  std::vector<BasicBlock*> known_blocks;
-  std::vector<BasicBlock*> block_stack;
+  std::vector<BasicBlockVertex*> known_blocks;
+  std::vector<BasicBlockVertex*> block_stack;
 
   auto handle_branch =
-    [&known_blocks, &block_stack, &graph](
-      BasicBlock* cur_block, uint32_t target_addr, uint32_t inst_addr, OutgoingEdgeType branch_type) {
-      if (BasicBlock* known_block = at_block_head(known_blocks, target_addr); known_block != nullptr) {
+    [&block_stack, &graph](
+      BasicBlockVertex* cur_block, uint32_t target_addr, uint32_t inst_addr, BlockTransfer branch_type) {
+      if (BasicBlockVertex* known_block = at_block_head(graph.get(), target_addr); known_block != nullptr) {
         // If we're branching into the start of another block, just link us.
-        cur_block->_outgoing_edges.push_back({branch_type, known_block});
+        graph->emplace_link(cur_block, known_block, branch_type);
         return;
       }
 
-      BasicBlock* next_block = nullptr;
-      if (BasicBlock* known_block = contained_in_block(known_blocks, target_addr); known_block != nullptr) {
+      BasicBlockVertex* next_block = nullptr;
+      if (BasicBlockVertex* known_block = contained_in_block(graph.get(), target_addr); known_block != nullptr) {
         next_block = split_blocks(known_block, target_addr, *graph);
       } else {
-        next_block = new BasicBlock();
-        next_block->_block_start = target_addr;
-        next_block->_block_end = target_addr + 4;
-        next_block->_block_id = static_cast<uint32_t>(graph->_nodes_by_id.size());
-        graph->_nodes_by_id.push_back(next_block);
+        next_block = graph->vertex(graph->emplace_vertex(target_addr, target_addr + 4));
 
         block_stack.push_back(next_block);
-        known_blocks.push_back(next_block);
       }
 
-      cur_block->_outgoing_edges.push_back({branch_type, next_block});
-      cur_block->_block_end = inst_addr + 0x4;
+      graph->emplace_link(cur_block, next_block, branch_type);
+      cur_block->data()._block_end = inst_addr + 0x4;
     };
 
   block_stack.push_back(start);
-  known_blocks.push_back(start);
 
   // Build initial graph
   while (!block_stack.empty()) {
-    BasicBlock* this_block = block_stack.back();
+    BasicBlockVertex* this_block = block_stack.back();
     block_stack.pop_back();
 
-    for (uint32_t inst_address = this_block->_block_start;; inst_address += 0x4) {
+    for (uint32_t inst_address = std::get<BasicBlock>(this_block->_d)._block_start;; inst_address += 0x4) {
       // Extend the current block
-      this_block->_block_end = inst_address + 0x4;
+      this_block->data()._block_end = inst_address + 0x4;
+
       // Check if we're falling through to an already known block
-      auto fallthrough_block = at_block_head(known_blocks, inst_address);
-      if (fallthrough_block != nullptr && fallthrough_block != this_block) {
-        this_block->_outgoing_edges.push_back({OutgoingEdgeType::kFallthrough, fallthrough_block});
-        this_block->_block_end = inst_address;
+      if (BasicBlockVertex* fallthrough_block = at_block_head(graph.get(), inst_address);
+          fallthrough_block != nullptr && fallthrough_block != this_block) {
+        graph->emplace_link(this_block, fallthrough_block, BlockTransfer::kFallthrough);
+        this_block->data()._block_end = inst_address;
         break;
       }
 
@@ -123,7 +97,6 @@ void run_graph_analysis(Subroutine& routine, BinaryContext const& ctx, uint32_t 
       switch (inst._op) {
         case InstOperation::kBclr:
         case InstOperation::kBcctr:
-          this_block->_terminal_block = true;
           break;
 
         case InstOperation::kB: {
@@ -131,7 +104,7 @@ void run_graph_analysis(Subroutine& routine, BinaryContext const& ctx, uint32_t 
           const uint32_t target_off = static_cast<uint32_t>(std::get<RelBranch>(inst._reads[0])._rel_32);
           const uint32_t target_addr = absolute ? target_off : inst_address + target_off;
 
-          handle_branch(this_block, target_addr, inst_address, OutgoingEdgeType::kUnconditional);
+          handle_branch(this_block, target_addr, inst_address, BlockTransfer::kUnconditional);
 
           break;
         }
@@ -142,8 +115,8 @@ void run_graph_analysis(Subroutine& routine, BinaryContext const& ctx, uint32_t 
           const uint32_t target_addr = absolute ? target_off : inst_address + target_off;
           const uint32_t next_addr = inst_address + 0x4;
 
-          handle_branch(this_block, target_addr, inst_address, OutgoingEdgeType::kConditionTrue);
-          handle_branch(this_block, next_addr, inst_address, OutgoingEdgeType::kConditionFalse);
+          handle_branch(this_block, target_addr, inst_address, BlockTransfer::kConditionTrue);
+          handle_branch(this_block, next_addr, inst_address, BlockTransfer::kConditionFalse);
 
           break;
         }
@@ -159,27 +132,18 @@ void run_graph_analysis(Subroutine& routine, BinaryContext const& ctx, uint32_t 
     }
   }
 
-  // Fill out block data now that blocks have been fully defined
-  // TODO: Is there a way to not disassemble twice?
-  dfs_forward(
-    [&graph, &ram](BasicBlock* cur) {
-      for (uint32_t addr = cur->_block_start; addr < cur->_block_end; addr += 4) {
-        cur->_instructions.emplace_back(ram.read_instruction(addr));
-      }
-      graph->_nodes_by_range.try_emplace(cur->_block_start, cur->_block_end, cur);
-    },
-    [](BasicBlock* next, BasicBlock* cur) {
-      next->_incoming_edges.emplace_back(IncomingEdgeType::kForwardEdge, cur);
-      return true;
-    },
-    graph->_root);
-
-  // Add all exit points at end
-  for (BasicBlock* block : graph->_nodes_by_id) {
-    if (block->_terminal_block) {
-      graph->_exit_points.push_back(block);
+  // Fill in instructions and interval tree
+  graph->foreach_real([&graph, &ram](BasicBlockVertex& bbv) {
+    for (uint32_t addr = bbv.data()._block_start; addr < bbv.data()._block_end; addr += 4) {
+      bbv.data()._instructions.emplace_back(ram.read_instruction(addr));
     }
-  }
+
+    graph->_nodes_by_range.try_emplace(bbv.data()._block_start, bbv.data()._block_end, bbv._idx);
+
+    if (bbv._out.empty()) {
+      graph->emplace_link(&bbv, graph->terminal(), BlockTransfer::kUnconditional);
+    }
+  });
 
   routine._graph = std::move(graph);
 }

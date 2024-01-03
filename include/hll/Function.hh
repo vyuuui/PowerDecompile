@@ -50,7 +50,6 @@ private:
 
   friend Function translate_ir_routine(ir::IrRoutine const& routine);
 
-  void translate_ir_block(ir::IrBlock const& irb, Sequence* scope);
   void translate_ir_routine(ir::IrRoutine const& routine);
 
 public:

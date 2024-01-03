@@ -482,12 +482,6 @@ void Function::write_pseudocode(std::ostream& sink) {
   printer.write('}');
 }
 
-void Function::translate_ir_block(ir::IrBlock const& irb, Sequence* scope) {
-  for (ir::IrInst const& inst : irb._insts) {
-    (void)inst;
-  }
-}
-
 void Function::translate_ir_routine(ir::IrRoutine const& routine) {
   for (size_t i = 0; i < routine._num_int_param; i++) {
     ir::GPRBindInfo const* gprb = routine._gpr_binds.get_temp(routine._int_param[i]);
@@ -519,9 +513,6 @@ void Function::translate_ir_routine(ir::IrRoutine const& routine) {
   _vaddr = 0;
   _root = alloc_node<Sequence>();
 
-  for (ir::IrBlock const& irb : routine._blocks) {
-    translate_ir_block(irb, _root);
-  }
 }
 
 Function translate_ir_routine(ir::IrRoutine const& routine) {

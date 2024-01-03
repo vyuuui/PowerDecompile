@@ -37,7 +37,7 @@ IrType datatype_to_reftype(ppc::DataType dt) {
 
 class GekkoTranslator {
   IrRoutine _ir_routine;
-  IrBlock* _active_blk;
+  IrBlockVertex* _active_blk;
 
   ppc::Subroutine const& _ppc_routine;
 
@@ -66,10 +66,9 @@ private:
   void translate_cmp(ppc::MetaInst const& inst, bool issigned);
 
   void translate_ppc_inst(ppc::MetaInst const& inst);
-  void translate_block_transfer(ppc::BasicBlock const* from, ppc::BasicBlock const* to, ppc::OutgoingEdgeType etype);
-  void translate_conditional_transfer(ppc::BasicBlock const* to, ppc::BasicBlock const* from, bool invert);
+  void translate_block_condition(ppc::BasicBlockVertex const& blk);
   template <typename SetType>
-  void compute_block_binds(ppc::BasicBlock const& block);
+  void compute_block_binds(ppc::BasicBlockVertex const& block);
   void compute_parameters();
 
 public:
@@ -80,17 +79,17 @@ public:
 };
 
 template <typename SetType>
-void GekkoTranslator::compute_block_binds(ppc::BasicBlock const& block) {
+void GekkoTranslator::compute_block_binds(ppc::BasicBlockVertex const& block) {
   using RegType = typename SetType::RegType;
   auto& bind_tracker = _ir_routine.get_binds<SetType>();
-  auto const* lt = ppc::get_liveness<SetType>(&block);
+  auto const* lt = ppc::get_liveness<SetType>(&block.data());
   SetType connect_in = lt->_input;
   SetType param_in = lt->_routine_inputs;
 
   std::array<uint32_t, 32> rgn_begin;
-  std::fill(rgn_begin.begin(), rgn_begin.end(), block._block_start);
+  std::fill(rgn_begin.begin(), rgn_begin.end(), block.data()._block_start);
   for (size_t i = 0; i < lt->_live_in.size(); i++) {
-    const uint32_t cur_addr = block._block_start + 4 * i;
+    const uint32_t cur_addr = block.data()._block_start + 4 * i;
     SetType delta_reg = lt->_live_in[i] ^ lt->_live_out[i];
     SetType unused = lt->_def[i] - (lt->_live_in[i] + lt->_live_out[i]);
     while (delta_reg) {
@@ -132,11 +131,12 @@ void GekkoTranslator::compute_block_binds(ppc::BasicBlock const& block) {
     }
 
     const bool is_param = param_in.in_set(out_reg);
-    const bool is_ret = block._terminal_block && std::get<SetType>(ppc::kRegSets._return_set).in_set(out_reg);
+    const bool is_ret =
+      _ppc_routine._graph->is_exit_vertex(&block) && std::get<SetType>(ppc::kRegSets._return_set).in_set(out_reg);
 
     param_in -= out_reg;
     const uint32_t new_temp = bind_tracker.add_block_bind(
-      out_reg, is_param, is_ret, rgn_begin[static_cast<uint8_t>(out_reg)], block._block_end);
+      out_reg, is_param, is_ret, rgn_begin[static_cast<uint8_t>(out_reg)], block.data()._block_end);
     bind_tracker.publish_out(block, new_temp);
     if (connect_in.in_set(out_reg)) {
       bind_tracker.publish_in(block, new_temp);
@@ -223,7 +223,7 @@ OpVar GekkoTranslator::translate_lr_op(uint32_t va) const { assert(false); }
 
 void GekkoTranslator::translate_oerc(ppc::MetaInst const& inst, OpVar dest_op) {
   if (check_flags(inst._flags, ppc::InstFlags::kWritesRecord)) {
-    _active_blk->_insts.emplace_back(IrOpcode::kRcTest, dest_op);
+    _active_blk->data()._insts.emplace_back(IrOpcode::kRcTest, dest_op);
   }
   // TODO: other flags
 }
@@ -233,21 +233,21 @@ IrInst& GekkoTranslator::translate_dss_wrr(IrOpcode type, ppc::MetaInst const& i
   OpVar src1 = translate_op(inst._reads[0], inst._va);
   OpVar src2 = translate_op(inst._reads[1], inst._va);
 
-  return _active_blk->_insts.emplace_back(type, dest, src1, src2);
+  return _active_blk->data()._insts.emplace_back(type, dest, src1, src2);
 }
 
 void GekkoTranslator::translate_addi(IrOpcode type, ppc::MetaInst const& inst) {
   if (std::holds_alternative<ppc::AuxImm>(inst._reads[0])) {
     OpVar src = translate_op(inst._reads[1], inst._va);
     OpVar dst = translate_op(inst._writes[0], inst._va);
-    _active_blk->_insts.emplace_back(IrOpcode::kMov, dst, src);
+    _active_blk->data()._insts.emplace_back(IrOpcode::kMov, dst, src);
   } else if (std::get<ppc::GPRSlice>(inst._reads[0])._reg == ppc::GPR::kR1) {
     auto var = _ppc_routine._stack->variable_for_offset(std::get<ppc::SIMM>(inst._reads[1])._imm_value);
     OpVar dst = translate_op(inst._writes[0], inst._va);
     if (var->_is_param) {
-      _active_blk->_insts.emplace_back(IrOpcode::kMov, dst, ParamRef{_ir_routine.param_idx(var->_offset), true});
+      _active_blk->data()._insts.emplace_back(IrOpcode::kMov, dst, ParamRef{_ir_routine.param_idx(var->_offset), true});
     } else {
-      _active_blk->_insts.emplace_back(IrOpcode::kMov, dst, StackRef{var->_offset, true});
+      _active_blk->data()._insts.emplace_back(IrOpcode::kMov, dst, StackRef{var->_offset, true});
     }
   } else {
     translate_oerc(inst, translate_dss_wrr(type, inst)._ops[0]);
@@ -259,7 +259,7 @@ void GekkoTranslator::translate_addis(ppc::MetaInst const& inst) {
     OpVar src = translate_op(inst._reads[1], inst._va);
     OpVar dst = translate_op(inst._writes[0], inst._va);
     std::get<Immediate>(dst)._val <<= 16;
-    _active_blk->_insts.emplace_back(IrOpcode::kMov, dst, src);
+    _active_blk->data()._insts.emplace_back(IrOpcode::kMov, dst, src);
   } else {
     IrInst& inst_tr = translate_dss_wrr(IrOpcode::kAdd, inst);
     std::get<Immediate>(inst_tr._ops[2])._val <<= 16;
@@ -269,14 +269,14 @@ void GekkoTranslator::translate_addis(ppc::MetaInst const& inst) {
 
 void GekkoTranslator::translate_adde(ppc::MetaInst const& inst) {
   IrInst& inst_tr = translate_dss_wrr(IrOpcode::kAdd, inst);
-  _active_blk->_insts.emplace_back(IrOpcode::kAddc, inst_tr._ops[0], translate_carry_op(inst._va));
+  _active_blk->data()._insts.emplace_back(IrOpcode::kAddc, inst_tr._ops[0], translate_carry_op(inst._va));
   translate_oerc(inst, inst_tr._ops[0]);
 }
 
 void GekkoTranslator::translate_adde_imm(ppc::MetaInst const& inst, OpVar imm) {
   OpVar dst = translate_op(inst._writes[0], inst._va);
   OpVar src = translate_op(inst._reads[0], inst._va);
-  _active_blk->_insts.emplace_back(IrOpcode::kAddc, dst, src, imm);
+  _active_blk->data()._insts.emplace_back(IrOpcode::kAddc, dst, src, imm);
   translate_oerc(inst, dst);
 }
 
@@ -284,9 +284,9 @@ void GekkoTranslator::translate_load(ppc::MetaInst const& inst) {
   OpVar dst = translate_op(inst._writes[0], inst._va);
   OpVar src = translate_op(inst._reads[0], inst._va);
   if (std::holds_alternative<StackRef>(dst) || std::holds_alternative<ParamRef>(dst)) {
-    _active_blk->_insts.emplace_back(IrOpcode::kMov, dst, src);
+    _active_blk->data()._insts.emplace_back(IrOpcode::kMov, dst, src);
   } else {
-    _active_blk->_insts.emplace_back(IrOpcode::kLoad, dst, src);
+    _active_blk->data()._insts.emplace_back(IrOpcode::kLoad, dst, src);
   }
 }
 
@@ -294,9 +294,9 @@ void GekkoTranslator::translate_store(ppc::MetaInst const& inst) {
   OpVar dst = translate_op(inst._writes[0], inst._va);
   OpVar src = translate_op(inst._reads[0], inst._va);
   if (std::holds_alternative<StackRef>(dst) || std::holds_alternative<ParamRef>(dst)) {
-    _active_blk->_insts.emplace_back(IrOpcode::kMov, dst, src);
+    _active_blk->data()._insts.emplace_back(IrOpcode::kMov, dst, src);
   } else {
-    _active_blk->_insts.emplace_back(IrOpcode::kStore, dst, src);
+    _active_blk->data()._insts.emplace_back(IrOpcode::kStore, dst, src);
   }
 }
 
@@ -304,7 +304,7 @@ void GekkoTranslator::translate_or(ppc::MetaInst const& inst) {
   if (inst._reads[0] == inst._reads[1]) {
     OpVar dst = translate_op(inst._writes[0], inst._va);
     OpVar src = translate_op(inst._reads[0], inst._va);
-    _active_blk->_insts.emplace_back(IrOpcode::kMov, dst, src);
+    _active_blk->data()._insts.emplace_back(IrOpcode::kMov, dst, src);
     translate_oerc(inst, dst);
   } else {
     translate_oerc(inst, translate_dss_wrr(IrOpcode::kOrB, inst)._ops[0]);
@@ -313,14 +313,14 @@ void GekkoTranslator::translate_or(ppc::MetaInst const& inst) {
 
 void GekkoTranslator::translate_branch(ppc::MetaInst const& inst) {
   if (check_flags(inst._flags, ppc::InstFlags::kWritesLR)) {
-    _active_blk->_insts.emplace_back(IrOpcode::kCall, FunctionRef{inst.branch_target()});
+    _active_blk->data()._insts.emplace_back(IrOpcode::kCall, FunctionRef{inst.branch_target()});
   }
   // Block transitions handled elsewhere
 }
 
 void GekkoTranslator::translate_branch_ctr(ppc::MetaInst const& inst) {
   if (check_flags(inst._flags, ppc::InstFlags::kWritesLR)) {
-    _active_blk->_insts.emplace_back(IrOpcode::kCall, translate_ctr_op(inst._va));
+    _active_blk->data()._insts.emplace_back(IrOpcode::kCall, translate_ctr_op(inst._va));
   }
 }
 
@@ -329,16 +329,16 @@ void GekkoTranslator::translate_branch_lr(ppc::MetaInst const& inst) {
     auto ret_lo = _ir_routine._gpr_binds.query_temp(inst._va, ppc::GPR::kR3);
     auto ret_hi = _ir_routine._gpr_binds.query_temp(inst._va, ppc::GPR::kR4);
     if (ret_lo != nullptr && ret_hi != nullptr) {
-      _active_blk->_insts.emplace_back(IrOpcode::kReturn,
+      _active_blk->data()._insts.emplace_back(IrOpcode::kReturn,
         TempVar::integral(ret_lo->_num, ret_lo->_type),
         TempVar::integral(ret_hi->_num, ret_hi->_type));
     } else if (ret_lo != nullptr) {
-      _active_blk->_insts.emplace_back(IrOpcode::kReturn, TempVar::integral(ret_lo->_num, ret_lo->_type));
+      _active_blk->data()._insts.emplace_back(IrOpcode::kReturn, TempVar::integral(ret_lo->_num, ret_lo->_type));
     } else {
-      _active_blk->_insts.emplace_back(IrOpcode::kReturn);
+      _active_blk->data()._insts.emplace_back(IrOpcode::kReturn);
     }
   } else if (check_flags(inst._flags, ppc::InstFlags::kWritesLR)) {
-    _active_blk->_insts.emplace_back(IrOpcode::kCall, translate_lr_op(inst._va));
+    _active_blk->data()._insts.emplace_back(IrOpcode::kCall, translate_lr_op(inst._va));
   }
 }
 
@@ -659,81 +659,81 @@ void GekkoTranslator::translate_ppc_inst(ppc::MetaInst const& inst) {
   }
 }
 
-void GekkoTranslator::translate_block_transfer(
-  ppc::BasicBlock const* from, ppc::BasicBlock const* to, ppc::OutgoingEdgeType etype) {
-  switch (etype) {
-    case ppc::OutgoingEdgeType::kUnconditional:
-    case ppc::OutgoingEdgeType::kFallthrough:
-      _active_blk->_tr_out.emplace_back(from->_block_id, to->_block_id, true);
-      break;
-
-    case ppc::OutgoingEdgeType::kConditionTrue:
-      translate_conditional_transfer(to, from, true);
-      break;
-
-    case ppc::OutgoingEdgeType::kConditionFalse:
-      translate_conditional_transfer(to, from, false);
-      break;
-  }
-}
-
-void GekkoTranslator::translate_conditional_transfer(
-  ppc::BasicBlock const* to, ppc::BasicBlock const* from, bool taken) {
-  ppc::MetaInst const& inst = from->_instructions.back();
+void GekkoTranslator::translate_block_condition(ppc::BasicBlockVertex const& blk) {
+  ppc::MetaInst const& inst = blk.data()._instructions.back();
   if (inst._op == ppc::InstOperation::kBc) {
-    TempVar var = std::get<TempVar>(translate_op(inst._reads[0], inst._va));
-    assert(var._base._class == TempClass::kCondition);
+    TempVar var;
 
     switch (ppc::bo_type_from_imm(inst._binst.bo())) {
       case ppc::BOType::kT:
-        _active_blk->_tr_out.emplace_back(to->_block_id, from->_block_id, var._cnd, false, taken);
+        var = std::get<TempVar>(translate_op(inst._reads[0], inst._va));
+        assert(var._base._class == TempClass::kCondition);
+        _active_blk->data()._cond = var._cnd;
+        _active_blk->data()._inv_cond = false;
+        _active_blk->data()._ctr = CounterCheck::kCounterIgnore;
         break;
 
       case ppc::BOType::kF:
-        _active_blk->_tr_out.emplace_back(to->_block_id, from->_block_id, var._cnd, true, taken);
+        var = std::get<TempVar>(translate_op(inst._reads[0], inst._va));
+        assert(var._base._class == TempClass::kCondition);
+        _active_blk->data()._cond = var._cnd;
+        _active_blk->data()._inv_cond = true;
+        _active_blk->data()._ctr = CounterCheck::kCounterIgnore;
         break;
 
       case ppc::BOType::kAlways:
-        // No fallthrough case here
-        if (taken) {
-          _active_blk->_tr_out.emplace_back(to->_block_id, from->_block_id, true);
-        }
+        _active_blk->data()._cond = std::nullopt;
         break;
 
       case ppc::BOType::kDz:
-        _active_blk->_tr_out.emplace_back(to->_block_id, from->_block_id, taken, CounterCheck::kCounterZero);
+        _active_blk->data()._ctr = CounterCheck::kCounterZero;
         break;
 
       case ppc::BOType::kDnz:
-        _active_blk->_tr_out.emplace_back(to->_block_id, from->_block_id, taken, CounterCheck::kCounterNotZero);
+        _active_blk->data()._ctr = CounterCheck::kCounterNotZero;
         break;
 
       case ppc::BOType::kDzt:
-        _active_blk->_tr_out.emplace_back(
-          to->_block_id, from->_block_id, var._cnd, false, taken, CounterCheck::kCounterZero);
+        var = std::get<TempVar>(translate_op(inst._reads[0], inst._va));
+        assert(var._base._class == TempClass::kCondition);
+        _active_blk->data()._cond = var._cnd;
+        _active_blk->data()._inv_cond = false;
+        _active_blk->data()._ctr = CounterCheck::kCounterZero;
         break;
 
       case ppc::BOType::kDzf:
-        _active_blk->_tr_out.emplace_back(
-          to->_block_id, from->_block_id, var._cnd, true, taken, CounterCheck::kCounterZero);
+        var = std::get<TempVar>(translate_op(inst._reads[0], inst._va));
+        assert(var._base._class == TempClass::kCondition);
+        _active_blk->data()._cond = var._cnd;
+        _active_blk->data()._inv_cond = true;
+        _active_blk->data()._ctr = CounterCheck::kCounterZero;
         break;
 
       case ppc::BOType::kDnzt:
-        _active_blk->_tr_out.emplace_back(
-          to->_block_id, from->_block_id, var._cnd, false, taken, CounterCheck::kCounterNotZero);
+        var = std::get<TempVar>(translate_op(inst._reads[0], inst._va));
+        assert(var._base._class == TempClass::kCondition);
+        _active_blk->data()._cond = var._cnd;
+        _active_blk->data()._inv_cond = false;
+        _active_blk->data()._ctr = CounterCheck::kCounterNotZero;
         break;
 
       case ppc::BOType::kDnzf:
-        _active_blk->_tr_out.emplace_back(
-          to->_block_id, from->_block_id, var._cnd, true, taken, CounterCheck::kCounterNotZero);
+        var = std::get<TempVar>(translate_op(inst._reads[0], inst._va));
+        assert(var._base._class == TempClass::kCondition);
+        _active_blk->data()._cond = var._cnd;
+        _active_blk->data()._inv_cond = true;
+        _active_blk->data()._ctr = CounterCheck::kCounterNotZero;
         break;
 
       default:
         assert(false);
         break;
     }
-  } else if (inst._op == ppc::InstOperation::kBc) {
+  } else if (inst._op == ppc::InstOperation::kBclr) {
     // TODO: conditional returns
+    assert(false);
+  } else if (inst._op == ppc::InstOperation::kBcctr) {
+    // TODO: switch
     assert(false);
   } else {
     assert(false);
@@ -766,42 +766,40 @@ void GekkoTranslator::compute_parameters() {
 }
 
 void GekkoTranslator::translate() {
-  ppc::dfs_forward(
-    [this](ppc::BasicBlock const* cur) {
-      compute_block_binds<ppc::GprSet>(*cur);
-      compute_block_binds<ppc::FprSet>(*cur);
-      compute_block_binds<ppc::CrSet>(*cur);
+  _ppc_routine._graph->preorder_fwd(
+    [this](ppc::BasicBlockVertex const& cur) {
+      // Don't compute binds on pseudo vertices
+      if (cur.is_real()) {
+        return;
+      }
+      compute_block_binds<ppc::GprSet>(cur);
+      compute_block_binds<ppc::FprSet>(cur);
+      compute_block_binds<ppc::CrSet>(cur);
     },
-    ppc::always_iterate,
-    _ppc_routine._graph->_root);
+    _ppc_routine._graph->root());
   _ir_routine._gpr_binds.collect_block_scope_temps();
   _ir_routine._fpr_binds.collect_block_scope_temps();
   _ir_routine._cr_binds.collect_block_scope_temps();
 
   compute_parameters();
 
-  ppc::dfs_forward(
-    [this](ppc::BasicBlock const* cur) {
-      _active_blk = &_ir_routine._blocks[cur->_block_id];
-      for (size_t i = 0; i < cur->_instructions.size(); i++) {
-        if (cur->_perilogue_types[i] == ppc::PerilogueInstructionType::kNormalInst) {
-          translate_ppc_inst(cur->_instructions[i]);
+  _ppc_routine._graph->preorder_fwd(
+    [this](ppc::BasicBlockVertex const& cur) {
+      _active_blk = _ir_routine._graph.vertex(cur._idx);
+      if (cur.is_real()) {
+        for (size_t i = 0; i < cur.data()._instructions.size(); i++) {
+          if (cur.data()._perilogue_types[i] == ppc::PerilogueInstructionType::kNormalInst) {
+            translate_ppc_inst(cur.data()._instructions[i]);
+          }
         }
-      }
-      for (auto const& [etype, dest] : cur->_outgoing_edges) {
-        translate_block_transfer(cur, dest, etype);
-      }
-    },
-    ppc::always_iterate,
-    _ppc_routine._graph->_root);
-  _ir_routine._root_id = _ir_routine._blocks[_ppc_routine._graph->_root->_block_id]._id;
 
-  // Connect reverse-edges
-  for (IrBlock& blk : _ir_routine._blocks) {
-    for (BlockTransition const& fedge : blk._tr_out) {
-      _ir_routine._blocks[fedge._target_idx]._tr_in.push_back(blk._id);
-    }
-  }
+        translate_block_condition(cur);
+      }
+
+      _active_blk->_out = cur._out;
+      _active_blk->_in = cur._in;
+    },
+    _ppc_routine._graph->root());
 }
 }  // namespace
 

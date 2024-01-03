@@ -1,53 +1,33 @@
 #pragma once
 
+#include <cstdint>
 #include <vector>
 
 #include "ir/IrInst.hh"
 #include "ir/RegisterBinding.hh"
 #include "ppc/Subroutine.hh"
+#include "ppc/SubroutineGraph.hh"
+#include "utl/FlowGraph.hh"
+#include "utl/VariantOverloaded.hh"
 
 namespace decomp::ir {
 enum class CounterCheck {
-  kIgnore,
+  kCounterIgnore,
   kCounterZero,
   kCounterNotZero,
 };
-struct BlockTransition {
-  uint32_t _src_idx;
-  uint32_t _target_idx;
-  std::optional<ConditionTVRef> _cond;
-  bool _inv_cond;
-  bool _take_if_true;
-  CounterCheck _counter;
-
-  BlockTransition(uint32_t src_idx,
-    uint32_t target_idx,
-    ConditionTVRef cond,
-    bool inv_cond,
-    bool take_if_true,
-    CounterCheck counter = CounterCheck::kIgnore)
-      : _src_idx(src_idx),
-        _target_idx(target_idx),
-        _cond(cond),
-        _inv_cond(inv_cond),
-        _take_if_true(take_if_true),
-        _counter(counter) {}
-
-  BlockTransition(
-    uint32_t src_idx, uint32_t target_idx, bool take_if_true, CounterCheck counter = CounterCheck::kIgnore)
-      : _src_idx(src_idx), _target_idx(target_idx), _inv_cond(false), _take_if_true(take_if_true), _counter(counter) {}
-};
 
 struct IrBlock {
-  uint32_t _id;
   std::vector<IrInst> _insts;
-  std::vector<BlockTransition> _tr_out;
-  std::vector<int> _tr_in;
+  // Condition check info
+  std::optional<ConditionTVRef> _cond;
+  bool _inv_cond;
+  CounterCheck _ctr;
 };
+using IrBlockVertex = FlowVertex<IrBlock>;
 
 struct IrRoutine {
-  std::vector<IrBlock> _blocks;
-  uint32_t _root_id;
+  FlowGraph<IrBlock> _graph;
   GPRBindTracker _gpr_binds;
   FPRBindTracker _fpr_binds;
   CRBindTracker _cr_binds;
@@ -58,10 +38,13 @@ struct IrRoutine {
   uint8_t _num_flt_param;
 
   IrRoutine(ppc::Subroutine const& routine)
-      : _gpr_binds(routine), _fpr_binds(routine), _cr_binds(routine), _num_int_param(0), _num_flt_param(0) {
-    _blocks.resize(routine._graph->_nodes_by_id.size());
-    for (size_t i = 0; i < _blocks.size(); i++) {
-      _blocks[i]._id = i;
+      : _gpr_binds(*routine._graph),
+        _fpr_binds(*routine._graph),
+        _cr_binds(*routine._graph),
+        _num_int_param(0),
+        _num_flt_param(0) {
+    for (size_t i = 0; i < routine._graph->size(); i++) {
+      _graph.emplace_vertex();
     }
     std::fill(_int_param.begin(), _int_param.end(), kInvalidTmp);
     std::fill(_flt_param.begin(), _flt_param.end(), kInvalidTmp);

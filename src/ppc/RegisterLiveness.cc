@@ -91,15 +91,15 @@ SetType defs_for_flags(InstFlags flags) {
 }
 
 template <typename SetType>
-void eval_liveness_local(BasicBlock* block, BinaryContext const& ctx) {
-  auto rlt = get_liveness<SetType>(block);
+void eval_liveness_local(BasicBlock& block, BinaryContext const& ctx) {
+  auto rlt = get_liveness<SetType>(&block);
 
   SetType inputs;
   SetType outputs;
   SetType def_mask;
 
-  for (size_t i = 0; i < block->_instructions.size(); i++) {
-    MetaInst const& inst = block->_instructions[i];
+  for (size_t i = 0; i < block._instructions.size(); i++) {
+    MetaInst const& inst = block._instructions[i];
 
     // Naming convention:
     // live_in: Registers live coming into this instruction
@@ -156,7 +156,7 @@ void eval_liveness_local(BasicBlock* block, BinaryContext const& ctx) {
   rlt->_overwrite = def_mask;
 
   SetType input_mask = inputs;
-  for (size_t i = 0; input_mask && i < block->_instructions.size(); i++) {
+  for (size_t i = 0; input_mask && i < block._instructions.size(); i++) {
     rlt->_live_in[i] += input_mask;
     input_mask -= rlt->_use[i];
     rlt->_live_out[i] += input_mask;
@@ -164,14 +164,13 @@ void eval_liveness_local(BasicBlock* block, BinaryContext const& ctx) {
 }
 
 template <typename SetType>
-bool backpropagate_outputs(BasicBlock* block) {
-  auto rlt = get_liveness<SetType>(block);
+bool backpropagate_outputs(SubroutineGraph& graph, BasicBlockVertex& bbv) {
+  auto rlt = get_liveness<SetType>(&bbv.data());
 
   SetType outedge_inputs;
-  for (auto&& [_, outgoing] : block->_outgoing_edges) {
-    outedge_inputs += get_liveness<SetType>(outgoing)->_input;
-  }
-  if (block->_terminal_block) {
+  graph.foreach_real_outedge(
+    [&outedge_inputs](BasicBlockVertex& bbv) { outedge_inputs += get_liveness<SetType>(&bbv.data())->_input; }, &bbv);
+  if (graph.is_exit_vertex(&bbv)) {
     outedge_inputs += std::get<SetType>(kRegSets._return_set);
   }
 
@@ -186,7 +185,7 @@ bool backpropagate_outputs(BasicBlock* block) {
     rlt->_propagated -= used_pt;
     rlt->_output += used_pt;
     rlt->_input += used_pt;
-    for (size_t i = 0; i < block->_instructions.size(); i++) {
+    for (size_t i = 0; i < bbv.data()._instructions.size(); i++) {
       rlt->_live_in[i] += used_pt;
       rlt->_live_out[i] += used_pt;
     }
@@ -197,13 +196,16 @@ bool backpropagate_outputs(BasicBlock* block) {
 }
 
 template <typename SetType>
-bool propagate_guesses(BasicBlock* block) {
-  auto rlt = get_liveness<SetType>(block);
+bool propagate_guesses(SubroutineGraph& graph, BasicBlockVertex& bbv) {
+  auto rlt = get_liveness<SetType>(&bbv.data());
 
   SetType passthrough_inputs;
-  for (auto&& [_, incoming] : block->_incoming_edges) {
-    passthrough_inputs += get_liveness<SetType>(incoming)->_guess_out + get_liveness<SetType>(incoming)->_propagated;
-  }
+  graph.foreach_real_inedge(
+    [&passthrough_inputs](BasicBlockVertex& bbv) {
+      passthrough_inputs +=
+        get_liveness<SetType>(&bbv.data())->_guess_out + get_liveness<SetType>(&bbv.data())->_propagated;
+    },
+    &bbv);
 
   // Additional inputs should only include new (passthrough) registers
   passthrough_inputs -= rlt->_overwrite + rlt->_input;
@@ -218,8 +220,8 @@ bool propagate_guesses(BasicBlock* block) {
 }
 
 template <typename SetType>
-void clear_unused_sections(BasicBlock* block, BinaryContext const& ctx) {
-  auto rlt = get_liveness<SetType>(block);
+void clear_unused_sections(BasicBlock& block, BinaryContext const& ctx) {
+  auto rlt = get_liveness<SetType>(&block);
 
   // Sweep through the block to clear out liveness for unused sections, E.G.
   // D=Def U=Use .=Neither
@@ -227,8 +229,8 @@ void clear_unused_sections(BasicBlock* block, BinaryContext const& ctx) {
   //                              |____________|
   //                              unused section
   SetType unused_mask = rlt->_guess_out;
-  for (size_t i = block->_instructions.size(); i > 0; i--) {
-    MetaInst const& inst = block->_instructions[i - 1];
+  for (size_t i = block._instructions.size(); i > 0; i--) {
+    MetaInst const& inst = block._instructions[i - 1];
     rlt->_live_out[i - 1] -= unused_mask;
 
     SetType possible_call_uses;
@@ -246,14 +248,14 @@ void clear_unused_sections(BasicBlock* block, BinaryContext const& ctx) {
 }
 
 template <typename SetType>
-void find_routine_params(BasicBlock* cur) {
-  SetType expected = get_liveness<SetType>(cur)->_input;
+void find_routine_params(SubroutineGraph& graph, BasicBlockVertex& bbv) {
+  SetType expected = get_liveness<SetType>(&bbv.data())->_input;
   SetType provided;
-  for (auto const& [_, in_node] : cur->_incoming_edges) {
-    provided += get_liveness<SetType>(in_node)->_output;
-  }
+  graph.foreach_real_inedge(
+    [&provided](BasicBlockVertex& bbv) { provided += get_liveness<SetType>(&bbv.data())->_output; }, &bbv);
 
-  get_liveness<SetType>(cur)->_routine_inputs += (expected - provided) & std::get<SetType>(kRegSets._parameter_set);
+  get_liveness<SetType>(&bbv.data())->_routine_inputs +=
+    (expected - provided) & std::get<SetType>(kRegSets._parameter_set);
 }
 }  // namespace
 
@@ -277,75 +279,71 @@ void run_liveness_analysis(Subroutine& routine, BinaryContext const& ctx) {
   };
 
   // Cycle 1: Evaluate liveness within a block, ignoring neighbors
-  dfs_forward(
-    [&ctx](BasicBlock* cur) {
-      cur->_gpr_lifetimes = std::make_unique<GprLiveness>();
-      cur->_fpr_lifetimes = std::make_unique<FprLiveness>();
-      cur->_cr_lifetimes = std::make_unique<CrLiveness>();
-      eval_liveness_local<GprSet>(cur, ctx);
-      eval_liveness_local<FprSet>(cur, ctx);
-      eval_liveness_local<CrSet>(cur, ctx);
-    },
-    always_iterate,
-    routine._graph->_root);
+  routine._graph->foreach_real([&ctx](BasicBlockVertex& bbv) {
+    bbv.data()._gpr_lifetimes = std::make_unique<GprLiveness>();
+    bbv.data()._fpr_lifetimes = std::make_unique<FprLiveness>();
+    bbv.data()._cr_lifetimes = std::make_unique<CrLiveness>();
+    eval_liveness_local<GprSet>(bbv.data(), ctx);
+    eval_liveness_local<FprSet>(bbv.data(), ctx);
+    eval_liveness_local<CrSet>(bbv.data(), ctx);
+  });
 
   // Cycle 2: Propagate GPR/FPR liveness guesses to outputs and from inputs iteratively until there are no more changes
   for (IterState iter_state; !iter_state.done(); iter_state.iterate()) {
-    dfs_forward(
-      [&iter_state](BasicBlock* cur) {
+    routine._graph->preorder_fwd(
+      [&iter_state, &routine](BasicBlockVertex& bbv) {
+        if (!bbv.is_real()) {
+          return;
+        }
+
         if (!iter_state.gpr_done) {
-          iter_state.gpr_changed |= propagate_guesses<GprSet>(cur);
+          iter_state.gpr_changed |= propagate_guesses<GprSet>(*routine._graph, bbv);
         }
         if (!iter_state.fpr_done) {
-          iter_state.fpr_changed |= propagate_guesses<FprSet>(cur);
+          iter_state.fpr_changed |= propagate_guesses<FprSet>(*routine._graph, bbv);
         }
         if (!iter_state.cr_done) {
-          iter_state.cr_changed |= propagate_guesses<CrSet>(cur);
+          iter_state.cr_changed |= propagate_guesses<CrSet>(*routine._graph, bbv);
         }
       },
-      always_iterate,
-      routine._graph->_root);
+      routine._graph->root());
   }
 
-  // TODO(optimize): More targeted backpropagation and reverse-DFS
   // Cycle 3: Backpropagate GPR/FPR liveness guesses from outputs and to inputs into
   for (IterState iter_state; !iter_state.done(); iter_state.iterate()) {
-    dfs_forward(
-      [&iter_state](BasicBlock* cur) {
+    routine._graph->postorder_fwd(
+      [&iter_state, &routine](BasicBlockVertex& bbv) {
+        if (!bbv.is_real()) {
+          return;
+        }
+
         if (!iter_state.gpr_done) {
-          iter_state.gpr_changed |= backpropagate_outputs<GprSet>(cur);
+          iter_state.gpr_changed |= backpropagate_outputs<GprSet>(*routine._graph, bbv);
         }
         if (!iter_state.fpr_done) {
-          iter_state.fpr_changed |= backpropagate_outputs<FprSet>(cur);
+          iter_state.fpr_changed |= backpropagate_outputs<FprSet>(*routine._graph, bbv);
         }
         if (!iter_state.cr_done) {
-          iter_state.cr_changed |= backpropagate_outputs<CrSet>(cur);
+          iter_state.cr_changed |= backpropagate_outputs<CrSet>(*routine._graph, bbv);
         }
       },
-      always_iterate,
-      routine._graph->_root);
+      routine._graph->root());
   }
 
   // Cycle 4: Clear out regions where a register is effectively dead (see comment in clear_unused_sections)
-  dfs_forward(
-    [&ctx](BasicBlock* cur) {
-      clear_unused_sections<GprSet>(cur, ctx);
-      clear_unused_sections<FprSet>(cur, ctx);
-      clear_unused_sections<CrSet>(cur, ctx);
-    },
-    always_iterate,
-    routine._graph->_root);
+  routine._graph->foreach_real([&ctx](BasicBlockVertex& bbv) {
+    clear_unused_sections<GprSet>(bbv.data(), ctx);
+    clear_unused_sections<FprSet>(bbv.data(), ctx);
+    clear_unused_sections<CrSet>(bbv.data(), ctx);
+  });
 
   // Cycle 5: Collect register-bound routine parameters into Subroutine::_gpr_param and Subroutine::_fpr_param
-  dfs_forward(
-    [&routine](BasicBlock* cur) {
-      find_routine_params<GprSet>(cur);
-      find_routine_params<FprSet>(cur);
-      routine._gpr_param += cur->_gpr_lifetimes->_routine_inputs;
-      routine._fpr_param += cur->_fpr_lifetimes->_routine_inputs;
-      // TODO: Check if CR parameters are some kind of standard
-    },
-    always_iterate,
-    routine._graph->_root);
+  routine._graph->foreach_real([&routine](BasicBlockVertex& bbv) {
+    find_routine_params<GprSet>(*routine._graph, bbv);
+    find_routine_params<FprSet>(*routine._graph, bbv);
+    routine._gpr_param += bbv.data()._gpr_lifetimes->_routine_inputs;
+    routine._fpr_param += bbv.data()._fpr_lifetimes->_routine_inputs;
+    // TODO: Check if CR parameters are some kind of standard
+  });
 }
 }  // namespace decomp::ppc

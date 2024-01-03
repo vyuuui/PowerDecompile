@@ -116,30 +116,30 @@ void write_ir_inst(IrInst const& inst, std::ostream& sink) {
   }
 }
 
-void write_block_transition(BlockTransition const& transition, std::ostream& sink) {
-  sink << fmt::format("jmp to block {} ", transition._target_idx);
-  if (transition._cond && transition._counter == CounterCheck::kIgnore) {
-    std::string cond_str = opvar_string(TempVar{._cnd = *transition._cond});
-    sink << fmt::format("if {} is {}", cond_str, transition._take_if_true ^ transition._inv_cond ? "true" : "false");
-  } else if (transition._cond && transition._counter != CounterCheck::kIgnore) {
-    std::string cond_str = opvar_string(TempVar{._cnd = *transition._cond});
-    sink << fmt::format("if {} is {} ", cond_str, transition._take_if_true ^ transition._inv_cond ? "true" : "false");
-    sink << fmt::format("and CTR is {}", transition._counter == CounterCheck::kCounterZero ? "zero" : "not zero");
-  } else if (!transition._cond && transition._counter != CounterCheck::kIgnore) {
-    sink << fmt::format("if CTR is {}", transition._counter == CounterCheck::kCounterZero ? "zero" : "not zero");
-  } else {
-    sink << "unconditionally";
-  }
-}
+void write_block(IrBlockVertex const& block, std::ostream& sink) {
+  constexpr auto take_if_true = [](BlockTransfer bt) {
+    return bt == BlockTransfer::kConditionTrue;
+  };
 
-void write_block(IrBlock const& block, std::ostream& sink) {
-  sink << fmt::format("Start of block id {}\n", block._id);
-  for (IrInst const& inst : block._insts) {
+  sink << fmt::format("Start of block id {}\n", block._idx);
+  for (IrInst const& inst : block.data()._insts) {
     write_ir_inst(inst, sink);
     sink << "\n";
   }
-  for (BlockTransition const& transition : block._tr_out) {
-    write_block_transition(transition, sink);
+  for (auto [target, bt] : block._out) {
+    sink << fmt::format("jmp to block {} ", target);
+    if (block.data()._cond && block.data()._ctr == CounterCheck::kCounterIgnore) {
+      std::string cond_str = opvar_string(TempVar{._cnd = *block.data()._cond});
+      sink << fmt::format("if {} is {}", cond_str, take_if_true(bt) ^ block.data()._inv_cond ? "true" : "false");
+    } else if (block.data()._cond && block.data()._ctr != CounterCheck::kCounterIgnore) {
+      std::string cond_str = opvar_string(TempVar{._cnd = *block.data()._cond});
+      sink << fmt::format("if {} is {} ", cond_str, take_if_true(bt) ^ block.data()._inv_cond ? "true" : "false");
+      sink << fmt::format("and CTR is {}", block.data()._ctr == CounterCheck::kCounterZero ? "zero" : "not zero");
+    } else if (!block.data()._cond && block.data()._ctr != CounterCheck::kCounterIgnore) {
+      sink << fmt::format("if CTR is {}", block.data()._ctr == CounterCheck::kCounterZero ? "zero" : "not zero");
+    } else {
+      sink << "unconditionally";
+    }
     sink << "\n";
   }
 }

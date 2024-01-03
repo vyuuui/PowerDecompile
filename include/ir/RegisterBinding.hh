@@ -8,9 +8,8 @@
 
 #include "ir/IrInst.hh"
 #include "ppc/RegSet.hh"
-#include "ppc/Subroutine.hh"
-#include "ppc/SubroutineGraph.hh"
 #include "utl/IntervalTree.hh"
+#include "utl/FlowGraph.hh"
 
 namespace decomp::ir {
 constexpr uint32_t kInvalidTmp = 0xffffffff;
@@ -88,7 +87,7 @@ private:
   }
 
 public:
-  BindTracker(ppc::Subroutine const& routine) { _forwarding_list.resize(routine._graph->_nodes_by_id.size()); }
+  BindTracker(FlowGraphBase const& graph) { _forwarding_list.resize(graph.size()); }
 
   uint32_t add_block_bind(RType reg, bool is_param, bool is_ret, uint32_t lo, uint32_t hi) {
     const uint32_t new_temp = static_cast<uint32_t>(_block_temps.size());
@@ -96,11 +95,11 @@ public:
     return new_temp;
   }
 
-  void publish_out(ppc::BasicBlock const& block, uint32_t idx) { _forwarding_list[block._block_id].emplace_back(idx); }
+  void publish_out(FlowVertexBase const& v, uint32_t idx) { _forwarding_list[v._idx].emplace_back(idx); }
 
-  void publish_in(ppc::BasicBlock const& block, uint32_t idx) {
-    for (auto [_, in_block] : block._incoming_edges) {
-      _forwarding_list[in_block->_block_id].emplace_back(idx);
+  void publish_in(FlowVertexBase const& v, uint32_t idx) {
+    for (auto [target, _] : v._in) {
+      _forwarding_list[target].emplace_back(idx);
     }
   }
 

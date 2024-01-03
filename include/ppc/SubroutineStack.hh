@@ -9,7 +9,7 @@ namespace decomp::ppc {
 struct BasicBlock;
 struct MetaInst;
 struct Subroutine;
-struct SubroutineGraph;
+class SubroutineGraph;
 
 enum class TypeSet : uint8_t {
   kNone = 0,
@@ -55,7 +55,7 @@ private:
 
 private:
   bool in_param_region(int16_t offset) const;
-  void analyze_block(BasicBlock const* block);
+  void analyze_block(BasicBlock const& block);
 
   void analyze_readwrite(MetaInst const& inst, MemRegOff operand, ReferenceType reftype);
 

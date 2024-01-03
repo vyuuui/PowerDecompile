@@ -9,11 +9,11 @@
 
 namespace decomp::ppc {
 namespace {
-void perilogue_block_analysis(BasicBlock* block, SubroutineStack& stack, BinaryContext const& ctx) {
-  constexpr auto backtrack_calle_save = [](BasicBlock const* block, GPR reg, size_t start) {
+void perilogue_block_analysis(BasicBlock& block, SubroutineStack& stack, BinaryContext const& ctx) {
+  constexpr auto backtrack_calle_save = [](BasicBlock const& block, GPR reg, size_t start) {
     size_t j;
     for (j = start; j > 0; j--) {
-      if (!block->_gpr_lifetimes->_live_out[j - 1].in_set(reg)) {
+      if (!block._gpr_lifetimes->_live_out[j - 1].in_set(reg)) {
         break;
       }
     }
@@ -24,8 +24,8 @@ void perilogue_block_analysis(BasicBlock* block, SubroutineStack& stack, BinaryC
     return PerilogueInstructionType::kNormalInst;
   };
 
-  for (size_t i = 0; i < block->_instructions.size(); i++) {
-    MetaInst const& inst = block->_instructions[i];
+  for (size_t i = 0; i < block._instructions.size(); i++) {
+    MetaInst const& inst = block._instructions[i];
     PerilogueInstructionType itype = PerilogueInstructionType::kNormalInst;
 
     if (inst._op == InstOperation::kStwu && inst._binst.rs() == GPR::kR1) {
@@ -38,10 +38,10 @@ void perilogue_block_analysis(BasicBlock* block, SubroutineStack& stack, BinaryC
       // (requires liveness tracking of SPRs)
     } else if (inst._op == InstOperation::kMtspr && inst._binst.rs() == GPR::kR0 && inst._binst.spr() == SPR::kLr) {
       for (size_t j = i; j > 0; j--) {
-        if (!block->_gpr_lifetimes->_live_out[j - 1].in_set(GPR::kR0)) {
+        if (!block._gpr_lifetimes->_live_out[j - 1].in_set(GPR::kR0)) {
           break;
         }
-        if (block->_perilogue_types[j - 1] == PerilogueInstructionType::kLoadSenderLR) {
+        if (block._perilogue_types[j - 1] == PerilogueInstructionType::kLoadSenderLR) {
           itype = PerilogueInstructionType::kMoveR0toLR;
           break;
         }
@@ -53,10 +53,10 @@ void perilogue_block_analysis(BasicBlock* block, SubroutineStack& stack, BinaryC
       if (store_reg == GPR::kR0) {
         // I really hope that LR saves can't happen across basic blocks
         for (size_t j = i; j > 0; j--) {
-          if (!block->_gpr_lifetimes->_live_out[j - 1].in_set(store_reg)) {
+          if (!block._gpr_lifetimes->_live_out[j - 1].in_set(store_reg)) {
             break;
           }
-          if (block->_perilogue_types[j - 1] == PerilogueInstructionType::kMoveLRToR0) {
+          if (block._perilogue_types[j - 1] == PerilogueInstructionType::kMoveLRToR0) {
             itype = PerilogueInstructionType::kSaveSenderLR;
             stack.variable_for_offset(store_loc._offset)->_is_frame_storage = true;
             break;
@@ -101,28 +101,27 @@ void perilogue_block_analysis(BasicBlock* block, SubroutineStack& stack, BinaryC
     } else if (inst._op == InstOperation::kB && is_abi_routine(ctx, inst.branch_target())) {
       itype = PerilogueInstructionType::kAbiRoutine;
       assert(i > 0);
-      MetaInst const& load_base_inst = block->_instructions[i - 1];
+      MetaInst const& load_base_inst = block._instructions[i - 1];
       if (load_base_inst._op == InstOperation::kAddi &&
           std::get<GPRSlice>(load_base_inst._writes[0])._reg == GPR::kR11 &&
           std::get<GPRSlice>(load_base_inst._reads[0])._reg == GPR::kR1) {
-        block->_perilogue_types[i - 1] = PerilogueInstructionType::kCalleeGPRSave;
+        block._perilogue_types[i - 1] = PerilogueInstructionType::kCalleeGPRSave;
         stack.variable_for_offset(std::get<SIMM>(load_base_inst._reads[1])._imm_value)->_is_frame_storage = true;
       }
     }
     // TODO: floating point analysis
 
-    block->_perilogue_types[i] = itype;
+    block._perilogue_types[i] = itype;
   }
 }
 }  // namespace
 
 void run_perilogue_analysis(Subroutine& routine, BinaryContext const& ctx) {
-  dfs_forward([](BasicBlock* cur) { cur->_perilogue_types.resize(cur->_instructions.size()); },
-    always_iterate,
-    routine._graph->_root);
-  perilogue_block_analysis(routine._graph->_root, *routine._stack, ctx);
-  for (BasicBlock* terminal_block : routine._graph->_exit_points) {
-    perilogue_block_analysis(terminal_block, *routine._stack, ctx);
-  }
+  routine._graph->foreach_real(
+    [](BasicBlockVertex& bbv) { bbv.data()._perilogue_types.resize(bbv.data()._instructions.size()); });
+  perilogue_block_analysis(routine._graph->entrypoint()->data(), *routine._stack, ctx);
+  routine._graph->foreach_exit([&routine, &ctx](BasicBlockVertex& bbv) {
+    perilogue_block_analysis(bbv.data(), *routine._stack, ctx);
+  });
 }
 }  // namespace decomp::ppc

@@ -6,7 +6,7 @@
 #include "ppc/RegSet.hh"
 
 namespace decomp::ppc {
-struct SubroutineGraph;
+class SubroutineGraph;
 class SubroutineStack;
 
 // Encapsulation of all data pertaining to a subroutine
