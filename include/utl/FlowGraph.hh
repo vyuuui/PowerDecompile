@@ -28,6 +28,11 @@ enum class BlockTransfer : uint32_t {
   kLastSwitchCase = 0xffffffff,
 };
 
+constexpr bool inverse_condition(BlockTransfer bt0, BlockTransfer bt1) {
+  return (bt0 == BlockTransfer::kConditionTrue && bt1 == BlockTransfer::kConditionFalse) ||
+         (bt0 == BlockTransfer::kConditionFalse && bt1 == BlockTransfer::kConditionTrue);
+}
+
 struct EdgeData {
   EdgeData() : _target(-1), _tr(BlockTransfer::kUnconditional) {}
   EdgeData(int target, BlockTransfer tr) : _target(target), _tr(tr) {}
@@ -45,6 +50,9 @@ struct FlowVertexBase {
   int _idx = -1;
   std::vector<EdgeData> _out;
   std::vector<EdgeData> _in;
+
+  constexpr bool single_succ() const { return _out.size() == 1; }
+  constexpr bool single_pred() const { return _in.size() == 1; }
 };
 
 class FlowGraphBase {
@@ -85,10 +93,12 @@ struct FlowVertex : public FlowVertexBase {
   virtual ~FlowVertex() {}
   VertexData& data() { return std::get<VertexData>(_d); }
   VertexData const& data() const { return std::get<VertexData>(_d); }
+  PseudoVertexType pseudo() const { return std::get<PseudoVertexType>(_d); }
 
   std::variant<PseudoVertexType, VertexData> _d;
 
   constexpr bool is_real() const { return std::holds_alternative<VertexData>(_d); }
+  constexpr bool is_pseudo() const { return std::holds_alternative<PseudoVertexType>(_d); }
   constexpr bool is_preheader() const {
     return std::holds_alternative<PseudoVertexType>(_d) &&
            std::get<PseudoVertexType>(_d) == PseudoVertexType::kGraphPreheader;
@@ -100,6 +110,7 @@ struct FlowVertex : public FlowVertexBase {
 };
 
 template <typename VertexData>
+  requires std::default_initializable<VertexData>
 class FlowGraph : public FlowGraphBase {
 public:
   using Vertex = FlowVertex<VertexData>;
@@ -175,12 +186,8 @@ public:
   Vertex* vertex(int idx) { return static_cast<Vertex*>(FlowGraphBase::vertex(idx)); }
   Vertex const* vertex(int idx) const { return static_cast<Vertex const*>(FlowGraphBase::vertex(idx)); }
 
-  Vertex const* entrypoint() const {
-    return root()->_out.size() > 0 ? vertex(root()->_out[0]._target) : nullptr;
-  }
-  Vertex* entrypoint() {
-    return root()->_out.size() > 0 ? vertex(root()->_out[0]._target) : nullptr;
-  }
+  Vertex const* entrypoint() const { return root()->_out.size() > 0 ? vertex(root()->_out[0]._target) : nullptr; }
+  Vertex* entrypoint() { return root()->_out.size() > 0 ? vertex(root()->_out[0]._target) : nullptr; }
 
   template <bool Forward, typename Visitor>
     requires std::invocable<Visitor, Vertex const&>
@@ -233,7 +240,6 @@ public:
   void foreach_exit(Visitor&& visitor) {
     foreach_real_inedge(std::forward<Visitor>(visitor), terminal());
   }
-
 
   bool is_exit_vertex(Vertex const* v) const {
     if (!v->is_real()) {
@@ -553,6 +559,31 @@ public:
     requires std::invocable<Visitor, Vertex&>
   void postorder_fwd(Visitor&& visitor, Vertex* start) {
     postorder<true>(std::forward<Visitor>(visitor), start);
+  }
+
+  template <typename RhsVertexData>
+  void copy_shape(FlowGraph<RhsVertexData> const* from) {
+    for (FlowVertex<RhsVertexData> const& rhsv : *from) {
+      Vertex* v;
+      if (rhsv.is_real()) {
+        v = vertex(emplace_vertex());
+      } else {
+        v = vertex(emplace_pseudovertex(rhsv.pseudo()));
+      }
+      v->_out = rhsv._out;
+      v->_in = rhsv._out;
+    }
+  }
+
+  template <typename RhsVertexData, typename Generator>
+    requires std::invocable<Generator, FlowVertex<RhsVertexData> const&, Vertex&>
+  void copy_shape_generator(FlowGraph<RhsVertexData> const* from, Generator&& generator) {
+    for (FlowVertex<RhsVertexData> const& rhsv : *from) {
+      Vertex* v = vertex(emplace_pseudovertex(PseudoVertexType::kUninitialized));
+      v->_out = rhsv._out;
+      v->_in = rhsv._out;
+      generator(rhsv, *v);
+    }
   }
 };
 }  // namespace decomp

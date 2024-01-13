@@ -14,6 +14,7 @@
 
 namespace decomp::ppc {
 struct BasicBlock {
+  BasicBlock() : _block_start(0), _block_end(0) {}
   BasicBlock(uint32_t start_va, uint32_t end_va) : _block_start(start_va), _block_end(end_va) {}
   // Inclusive start address
   uint32_t _block_start;
