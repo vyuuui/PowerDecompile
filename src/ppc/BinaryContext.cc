@@ -4,7 +4,7 @@
 
 #include "producers/DolData.hh"
 #include "producers/ElfData.hh"
-#include "utl/ErrorOr.hh"
+#include "utl/Either.hh"
 #include "utl/PatternScan.hh"
 
 namespace decomp::ppc {

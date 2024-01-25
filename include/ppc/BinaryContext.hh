@@ -5,7 +5,7 @@
 
 #include "ppc/CodeWarriorABIConfiguration.hh"
 #include "producers/RandomAccessData.hh"
-#include "utl/ErrorOr.hh"
+#include "utl/Either.hh"
 
 namespace decomp::ppc {
 enum class BinaryType {

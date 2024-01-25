@@ -58,28 +58,32 @@ struct BasicBlock : StaticTypedACN<ACNType::Basic> {
   BasicBlock(ir::IrBlockVertex const& irb) : _irb(irb) {}
   ir::IrBlockVertex const& _irb;
 
-  constexpr ir::IrBlockVertex const& operator*() const {
-    return _irb;
-  }
+  constexpr ir::IrBlockVertex const& operator*() const { return _irb; }
 
-  constexpr ir::IrBlockVertex const* operator->() const {
-    return &_irb;
-  }
+  constexpr ir::IrBlockVertex const* operator->() const { return &_irb; }
 };
 
 // Sequence of abstract nodes
 struct Seq : StaticTypedACN<ACNType::Seq> {
+  Seq() {}
+  Seq(std::vector<AbstractControlNode*>&& seq) : _seq(std::move(seq)) {}
   std::vector<AbstractControlNode*> _seq;
 };
 
 // If-sans-else schema
 struct If : StaticTypedACN<ACNType::If> {
+  If() : _head(nullptr), _true(nullptr), _invert(false) {}
+  If(AbstractControlNode* head, AbstractControlNode* t, bool invert) : _head(head), _true(t), _invert(invert) {}
   AbstractControlNode* _head;
   AbstractControlNode* _true;
+  bool _invert;
 };
 
 // If-else schema
 struct IfElse : StaticTypedACN<ACNType::IfElse> {
+  IfElse() : _head(nullptr), _true(nullptr), _false(nullptr) {}
+  IfElse(AbstractControlNode* head, AbstractControlNode* t, AbstractControlNode* f)
+      : _head(head), _true(t), _false(f) {}
   AbstractControlNode* _head;
   AbstractControlNode* _true;
   AbstractControlNode* _false;
@@ -93,8 +97,11 @@ struct IfElseIf : StaticTypedACN<ACNType::IfElseIf> {
 
 // Switch schema
 struct Switch : StaticTypedACN<ACNType::Switch> {
+  Switch() : _head(nullptr) {}
+  Switch(AbstractControlNode* head, std::vector<std::pair<BlockTransfer, AbstractControlNode*>>&& cases)
+      : _head(nullptr), _cases(std::move(cases)) {}
   AbstractControlNode* _head;
-  std::vector<std::pair<int, AbstractControlNode*>> _cases;
+  std::vector<std::pair<BlockTransfer, AbstractControlNode*>> _cases;
 };
 
 // Do-while schema

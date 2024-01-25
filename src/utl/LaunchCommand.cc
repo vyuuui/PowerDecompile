@@ -9,7 +9,7 @@
 #include <iomanip>
 #include <iostream>
 
-#include "utl/ErrorOr.hh"
+#include "utl/Either.hh"
 
 namespace decomp {
 namespace {

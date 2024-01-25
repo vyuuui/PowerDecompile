@@ -53,6 +53,7 @@ struct FlowVertexBase {
 
   constexpr bool single_succ() const { return _out.size() == 1; }
   constexpr bool single_pred() const { return _in.size() == 1; }
+  constexpr bool sess() const { return single_succ() && single_pred(); }
 };
 
 class FlowGraphBase {
