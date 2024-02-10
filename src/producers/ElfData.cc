@@ -1,9 +1,9 @@
 #include "producers/ElfData.hh"
 
-#include <elf.h>
-
 #include <cstring>
 #include <istream>
+
+#include "utl/elf.h"
 
 namespace decomp {
 namespace {
@@ -15,7 +15,7 @@ T byteswap(T val) {
   }
   return out;
 }
-}
+}  // namespace
 
 bool ElfData::load_from(std::istream& source) {
   Elf32_Ehdr hdr;
