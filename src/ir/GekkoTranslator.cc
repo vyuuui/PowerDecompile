@@ -8,6 +8,14 @@
 #include "ppc/SubroutineStack.hh"
 #include "utl/VariantOverloaded.hh"
 
+#if defined(_WIN32)
+#define count_trailing_zero _tzcnt_u32
+#define assert_not_reached __assume(false)
+#elif defined(__linux__)
+#define count_trailing_zero __builtin_ctz
+#define assert_not_reached __builtin_unreachable()
+#endif
+
 namespace decomp::ir {
 namespace {
 IrType datatype_to_reftype(ppc::DataType dt) {
@@ -93,7 +101,7 @@ void GekkoTranslator::compute_block_binds(ppc::BasicBlockVertex const& block) {
     SetType delta_reg = lt->_live_in[i] ^ lt->_live_out[i];
     SetType unused = lt->_def[i] - (lt->_live_in[i] + lt->_live_out[i]);
     while (delta_reg) {
-      RegType ref_reg = static_cast<RegType>(__builtin_ctz(delta_reg._set));
+      RegType ref_reg = static_cast<RegType>(count_trailing_zero(delta_reg._set));
       delta_reg -= ref_reg;
       if (std::get<SetType>(ppc::kRegSets._abi_regs).in_set(ref_reg)) {
         continue;
@@ -113,7 +121,7 @@ void GekkoTranslator::compute_block_binds(ppc::BasicBlockVertex const& block) {
     }
 
     while (unused) {
-      RegType ref_reg = static_cast<RegType>(__builtin_ctz(unused._set));
+      RegType ref_reg = static_cast<RegType>(count_trailing_zero(unused._set));
       unused -= ref_reg;
       if (std::get<SetType>(ppc::kRegSets._abi_regs).in_set(ref_reg)) {
         continue;
@@ -124,7 +132,7 @@ void GekkoTranslator::compute_block_binds(ppc::BasicBlockVertex const& block) {
 
   SetType out_set = lt->_output;
   while (out_set) {
-    RegType out_reg = static_cast<RegType>(__builtin_ctz(out_set._set));
+    RegType out_reg = static_cast<RegType>(count_trailing_zero(out_set._set));
     out_set -= out_reg;
     if (std::get<SetType>(ppc::kRegSets._abi_regs).in_set(out_reg)) {
       continue;
@@ -215,11 +223,11 @@ OpVar GekkoTranslator::translate_op(ppc::WriteSource op, uint32_t va) const {
   assert(false);
 }
 
-OpVar GekkoTranslator::translate_carry_op(uint32_t va) const { assert(false); }
+OpVar GekkoTranslator::translate_carry_op(uint32_t va) const { assert_not_reached; }
 
-OpVar GekkoTranslator::translate_ctr_op(uint32_t va) const { assert(false); }
+OpVar GekkoTranslator::translate_ctr_op(uint32_t va) const { assert_not_reached; }
 
-OpVar GekkoTranslator::translate_lr_op(uint32_t va) const { assert(false); }
+OpVar GekkoTranslator::translate_lr_op(uint32_t va) const { assert_not_reached; }
 
 void GekkoTranslator::translate_oerc(ppc::MetaInst const& inst, OpVar dest_op) {
   if (check_flags(inst._flags, ppc::InstFlags::kWritesRecord)) {
