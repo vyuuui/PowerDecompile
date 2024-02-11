@@ -1,0 +1,61 @@
+add_executable(decomp
+    dbgutil/Disassembler.cc
+    dbgutil/Disassembler.hh
+    dbgutil/IrPrinter.cc
+    dbgutil/IrPrinter.hh
+    hll/ExprNode.hh
+    hll/Function.cc
+    hll/Function.hh
+    hll/GotoStructurizer.cc
+    hll/GotoStructurizer.hh
+    hll/SemanticPreservingStructurizer.cc
+    hll/SemanticPreservingStructurizer.hh
+    hll/Structurizer.cc
+    hll/Structurizer.hh
+    ir/GekkoTranslator.cc
+    ir/GekkoTranslator.hh
+    ir/IrInst.hh
+    ir/RegisterBinding.hh
+    ppc/BinaryContext.cc
+    ppc/BinaryContext.hh
+    ppc/BinInst.hh
+    ppc/CodeWarriorABIConfiguration.hh
+    ppc/DataSource.hh
+    ppc/Perilogue.cc
+    ppc/Perilogue.hh
+    ppc/PpcDisasm.cc
+    ppc/PpcDisasm.hh
+    ppc/RegisterLiveness.cc
+    ppc/RegisterLiveness.hh
+    ppc/RegSet.hh
+    ppc/Subroutine.hh
+    ppc/SubroutineGraph.cc
+    ppc/SubroutineGraph.hh
+    ppc/SubroutineStack.cc
+    ppc/SubroutineStack.hh
+    producers/DolData.cc
+    producers/DolData.hh
+    producers/ElfData.cc
+    producers/ElfData.hh
+    producers/RandomAccessData.hh
+    producers/SectionedData.cc
+    producers/SectionedData.hh
+    utl/Either.hh
+    utl/elf.h
+    utl/FlagsEnum.hh
+    utl/FlowGraph.hh
+    utl/IntervalTree.hh
+    utl/LaunchCommand.cc
+    utl/LaunchCommand.hh
+    utl/PatternScan.cc
+    utl/PatternScan.hh
+    utl/ReservedVector.hh
+    utl/VariantOverloaded.hh
+    Commands.cc
+    Commands.hh
+    DecompMain.cc
+)
+
+set_property(TARGET CMakeProject PROPERTY CXX_STANDARD 20)
+
+# TODO: Add tests and install targets if needed.

@@ -51,9 +51,9 @@ struct FlowVertexBase {
   std::vector<EdgeData> _out;
   std::vector<EdgeData> _in;
 
-  constexpr bool single_succ() const { return _out.size() == 1; }
-  constexpr bool single_pred() const { return _in.size() == 1; }
-  constexpr bool sess() const { return single_succ() && single_pred(); }
+  bool single_succ() const { return _out.size() == 1; }
+  bool single_pred() const { return _in.size() == 1; }
+  bool sess() const { return single_succ() && single_pred(); }
 };
 
 class FlowGraphBase {
