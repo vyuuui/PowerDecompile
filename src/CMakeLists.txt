@@ -1,4 +1,4 @@
-add_executable(decomp
+add_library(decomp-lib
     dbgutil/Disassembler.cc
     dbgutil/Disassembler.hh
     dbgutil/IrPrinter.cc
@@ -53,9 +53,9 @@ add_executable(decomp
     utl/VariantOverloaded.hh
     Commands.cc
     Commands.hh
-    DecompMain.cc
 )
 
-set_property(TARGET CMakeProject PROPERTY CXX_STANDARD 20)
+target_include_directories(decomp-lib PRIVATE .)
+target_link_libraries(decomp-lib PRIVATE fmt::fmt-header-only)
 
-# TODO: Add tests and install targets if needed.
+set_property(TARGET decomp-lib PROPERTY CXX_STANDARD 20)
