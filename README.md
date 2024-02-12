@@ -2,13 +2,20 @@
 Disassembly and decompilation suite tuned for working with GameCube/Wii binaries. Work in progress!
 
 ## Building
-Clone and make
+### Linux
+Clone, cmake, and make.
 ```
-git clone https://git.shiiion.me/vyuuui/ppc-decomp.git
-cd ppc-decomp
+git clone https://git.shiiion.me/vyuuui/ppc-decomp.git --recurse-submodules
+mkdir ppc-decomp/build
+cd ppc-decomp/build
+cmake ..
 make -j
 ```
-Writes the product to `<repository>/bin/decompile`
+Writes the product to `<repository>/build/decomp`
+
+### Windows
+Same steps as linux, just use Visual Studio/MSBuild.
+
 ## Plans
 Here's what I can hope to see accomplished by this
 #### Basic feature set
