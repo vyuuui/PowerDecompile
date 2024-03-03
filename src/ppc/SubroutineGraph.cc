@@ -71,7 +71,7 @@ void run_graph_analysis(Subroutine& routine, BinaryContext const& ctx, uint32_t 
     BasicBlockVertex* this_block = block_stack.back();
     block_stack.pop_back();
 
-    for (uint32_t inst_address = std::get<BasicBlock>(this_block->_d)._block_start;; inst_address += 0x4) {
+    for (uint32_t inst_address = this_block->data()._block_start;; inst_address += 0x4) {
       // Extend the current block
       this_block->data()._block_end = inst_address + 0x4;
 

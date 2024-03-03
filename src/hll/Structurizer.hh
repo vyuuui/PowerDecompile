@@ -22,11 +22,6 @@ protected:
   ir::IrRoutine const* _routine;
   // Initial node set
   std::vector<AbstractControlNode*> _leaves;
-
-  // Immediate Dominator tree, _idom[i] = j => j idom i
-  std::vector<int> _idom_tree;
-  // Immediate Post-Dominator tree, _ipdom[i] = j => j pdom i
-  std::vector<int> _ipdom_tree;
 };
 
 enum class ACNType {
@@ -39,7 +34,9 @@ enum class ACNType {
   DoWhile,
   While,
   For,
+  SelfLoop,
   Goto,
+  Tail,
 };
 
 struct AbstractControlNode {
@@ -122,6 +119,12 @@ struct For : StaticTypedACN<ACNType::For> {
   AbstractControlNode* _cond;
   AbstractControlNode* _body;
   AbstractControlNode* _it;
+};
+
+struct SelfLoop : StaticTypedACN<ACNType::SelfLoop> {
+  SelfLoop() : _n(nullptr) {}
+  SelfLoop(AbstractControlNode* n) : _n(n) {}
+  AbstractControlNode* _n;
 };
 
 // TODO: remove structurizer parameter, refer to it from global options perhaps?

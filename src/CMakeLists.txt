@@ -43,6 +43,7 @@ add_library(decomp-lib
     utl/Either.hh
     utl/elf.h
     utl/FlagsEnum.hh
+    utl/FlowGraph.cc
     utl/FlowGraph.hh
     utl/IntervalTree.hh
     utl/LaunchCommand.cc
@@ -55,7 +56,5 @@ add_library(decomp-lib
     Commands.hh
 )
 
-target_include_directories(decomp-lib PRIVATE .)
-target_link_libraries(decomp-lib PRIVATE fmt::fmt-header-only)
-
-set_property(TARGET decomp-lib PROPERTY CXX_STANDARD 20)
+target_include_directories(decomp-lib PUBLIC ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(decomp-lib PUBLIC fmt::fmt-header-only)

@@ -5,11 +5,15 @@ if (POLICY CMP0141)
   set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
 endif()
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+set(CMAKE_CXX_STANDARD 20)
+enable_testing()
 
 project(PowerDecompile)
 add_subdirectory(externals/fmt)
+add_subdirectory(externals/doctest)
+
 add_subdirectory(src)
+add_subdirectory(test)
 
 add_executable(decomp
     src/DecompMain.cc

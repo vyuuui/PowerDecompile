@@ -11,15 +11,5 @@ namespace decomp::hll {
 class SemanticPreservingStructurizer : public ControlFlowStructurizer {
 public:
   HLLControlTree structurize() override;
-
-private:
-  struct ReducingNode {
-    AbstractControlNode* _inner;
-
-    std::vector<ReducingNode*> _outedge;
-    std::vector<ReducingNode*> _inedge;
-  };
-
-  std::vector<AbstractControlNode*> postordering();
 };
 }  // namespace decomp::hll

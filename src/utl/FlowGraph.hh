@@ -50,6 +50,7 @@ struct FlowVertexBase {
   int _idx = -1;
   std::vector<EdgeData> _out;
   std::vector<EdgeData> _in;
+  bool _detached = false;
 
   bool single_succ() const { return _out.size() == 1; }
   bool single_pred() const { return _in.size() == 1; }
@@ -61,6 +62,9 @@ private:
   std::vector<std::unique_ptr<FlowVertexBase>> _vtx;
   int _root_id;
   int _terminal_id;
+
+  template <bool PreDominator>
+  std::vector<int> lengauer_tarjan();
 
 protected:
   // Disallow creation of untemplated FlowGraphBase type externally
@@ -82,6 +86,62 @@ public:
 
   FlowVertexBase* vertex(int idx) { return _vtx[idx].get(); }
   FlowVertexBase const* vertex(int idx) const { return _vtx[idx].get(); }
+
+  std::vector<int> compute_dom_tree();
+  std::vector<int> compute_pdom_tree();
+
+  template <bool Forward, typename R, typename Visitor>
+    requires invocable_r<R, Visitor, FlowVertexBase const&, R>
+  void preorder_pathacc(Visitor&& visitor, FlowVertexBase const* start, R init) const {
+    std::vector<bool> visited(size());
+    std::vector<std::pair<FlowVertexBase const*, R>> process_stack;
+
+    process_stack.emplace_back(start, init);
+
+    while (!process_stack.empty()) {
+      auto [vert, acc] = process_stack.back();
+      process_stack.pop_back();
+
+      if (visited[vert->_idx]) {
+        continue;
+      }
+      visited[vert->_idx] = true;
+
+      R feedforward = visitor(*vert, acc);
+
+      for (auto [target, _] : (Forward ? vert->_out : vert->_in)) {
+        if (!visited[target]) {
+          process_stack.emplace_back(vertex(target), feedforward);
+        }
+      }
+    }
+  }
+  template <bool Forward, typename R, typename Visitor>
+    requires invocable_r<R, Visitor, FlowVertexBase&, R>
+  void preorder_pathacc(Visitor&& visitor, FlowVertexBase* start, R init) {
+    std::vector<bool> visited(size());
+    std::vector<std::pair<FlowVertexBase*, R>> process_stack;
+
+    process_stack.emplace_back(start, init);
+
+    while (!process_stack.empty()) {
+      auto [vert, acc] = process_stack.back();
+      process_stack.pop_back();
+
+      if (visited[vert->_idx]) {
+        continue;
+      }
+      visited[vert->_idx] = true;
+
+      R feedforward = visitor(*vert, acc);
+
+      for (auto [target, _] : (Forward ? vert->_out : vert->_in)) {
+        if (!visited[target]) {
+          process_stack.emplace_back(vertex(target), feedforward);
+        }
+      }
+    }
+  }
 };
 
 enum class PseudoVertexType { kUninitialized, kGraphPreheader, kGraphPostExit };
@@ -275,6 +335,23 @@ public:
 
   void emplace_link(int from_idx, int to_idx, BlockTransfer tr) { emplace_link(vertex(from_idx), vertex(to_idx), tr); }
 
+  // Removes all links of a node, but does not deallocate it
+  void detach(Vertex* v) {
+    for (auto [target, _] : v->_out) {
+      Vertex* succ = vertex(target);
+      succ->_in.erase(
+        std::find_if(succ->_in.begin(), succ->_in.end(), [v](EdgeData const& ed) { return ed._target == v->_idx; }));
+    }
+    for (auto [target, _] : v->_in) {
+      Vertex* pred = vertex(target);
+      pred->_out.erase(
+        std::find_if(pred->_out.begin(), pred->_out.end(), [v](EdgeData const& ed) { return ed._target == v->_idx; }));
+    }
+    v->_out.clear();
+    v->_in.clear();
+    v->_detached = true;
+  }
+
   // Insert a new node between `before` and all of its outgoing links
   int insert_after(Vertex* before, VertexData&& vdata, BlockTransfer tr) {
     const int new_idx = emplace_vertex(std::move(vdata));
@@ -302,7 +379,7 @@ public:
     requires std::invocable<Visitor, Vertex const&>
   void foreach_real(Visitor&& visitor) const {
     for (size_t i = 0; i < size(); i++) {
-      if (vertex(i)->is_real()) {
+      if (vertex(i)->is_real() && !vertex(i)->_detached) {
         visitor(*vertex(i));
       }
     }
@@ -311,7 +388,7 @@ public:
     requires std::invocable<Visitor, Vertex&>
   void foreach_real(Visitor&& visitor) {
     for (size_t i = 0; i < size(); i++) {
-      if (vertex(i)->is_real()) {
+      if (vertex(i)->is_real() && !vertex(i)->_detached) {
         visitor(*vertex(i));
       }
     }
@@ -321,7 +398,7 @@ public:
     requires invocable_r<R, Visitor, Vertex const&, R>
   R accumulate_real(Visitor&& visitor, R acc) const {
     for (size_t i = 0; i < size(); i++) {
-      if (vertex(i)->is_real()) {
+      if (vertex(i)->is_real() && !vertex(i)->_detached) {
         acc = visitor(*vertex(i), acc);
       }
     }
@@ -331,7 +408,7 @@ public:
     requires invocable_r<R, Visitor, Vertex&, R>
   R accumulate_real(Visitor&& visitor, R acc) {
     for (size_t i = 0; i < size(); i++) {
-      if (vertex(i)->is_real()) {
+      if (vertex(i)->is_real() && !vertex(i)->_detached) {
         acc = visitor(*vertex(i), acc);
       }
     }
@@ -342,7 +419,7 @@ public:
     requires std::predicate<Visitor, Vertex const&>
   Vertex* find_real(Visitor&& visitor) const {
     for (size_t i = 0; i < size(); i++) {
-      if (vertex(i)->is_real()) {
+      if (vertex(i)->is_real() && !vertex(i)->_detached) {
         if (visitor(*vertex(i))) {
           return vertex(i);
         }
@@ -354,7 +431,7 @@ public:
     requires std::predicate<Visitor, Vertex&>
   Vertex* find_real(Visitor&& visitor) {
     for (size_t i = 0; i < size(); i++) {
-      if (vertex(i)->is_real()) {
+      if (vertex(i)->is_real() && !vertex(i)->_detached) {
         if (visitor(*vertex(i))) {
           return vertex(i);
         }
@@ -587,4 +664,7 @@ public:
     }
   }
 };
+
+// Checks for a given dominator tree: n dom m
+bool dominates(std::vector<int> dom_tree, int n, int m);
 }  // namespace decomp
