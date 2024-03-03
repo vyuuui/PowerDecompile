@@ -63,6 +63,7 @@ enum class UnaryOpType {
   kNot,
   kBitNot,
   kDereference,
+  kReference,
 };
 
 enum class PrimitiveType {

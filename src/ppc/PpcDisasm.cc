@@ -317,7 +317,7 @@ void disasm_opcode_31(BinInst binst, MetaInst& meta_out) {
       meta_out._op = InstOperation::kCmp;
       meta_out._reads.push_back(binst.ra_w());
       meta_out._reads.push_back(binst.rb_w());
-      meta_out._reads.push_back(SPR::kXer);
+      meta_out._reads.push_back(XERBit::kSO);
       meta_out._writes.push_back(binst.crfd());
       meta_out._flags = binst.l();
       break;
@@ -372,7 +372,7 @@ void disasm_opcode_31(BinInst binst, MetaInst& meta_out) {
       meta_out._op = InstOperation::kCmpl;
       meta_out._reads.push_back(binst.ra_w());
       meta_out._reads.push_back(binst.rb_w());
-      meta_out._reads.push_back(SPR::kXer);
+      meta_out._reads.push_back(XERBit::kSO);
       meta_out._writes.push_back(binst.crfd());
       meta_out._flags = binst.l();
       break;
@@ -433,7 +433,7 @@ void disasm_opcode_31(BinInst binst, MetaInst& meta_out) {
     case 150:
       meta_out._op = InstOperation::kStwcxDot;
       meta_out._reads.push_back(binst.rs_w());
-      meta_out._reads.push_back(SPR::kXer);
+      meta_out._reads.push_back(XERBit::kSO);
       meta_out._writes.push_back(MemRegReg{binst.ra(), DataType::kS4, binst.rb()});
       meta_out._flags = InstFlags::kWritesRecord;
       break;
@@ -649,7 +649,7 @@ void disasm_opcode_31(BinInst binst, MetaInst& meta_out) {
     case 661:
       meta_out._op = InstOperation::kStswx;
       meta_out._reads.push_back(binst.rs_w());
-      meta_out._reads.push_back(SPR::kXer);
+      meta_out._reads.push_back(XERBit::kBC);
       meta_out._writes.push_back(MemRegReg{binst.ra(), DataType::kS4, binst.rb()});
       break;
     case 662:
@@ -695,7 +695,7 @@ void disasm_opcode_31(BinInst binst, MetaInst& meta_out) {
       meta_out._reads.push_back(binst.rs_w());
       meta_out._reads.push_back(binst.rb_w());
       meta_out._writes.push_back(binst.ra_w());
-      meta_out._writes.push_back(SPR::kXer);
+      meta_out._writes.push_back(XERBit::kCA);
       meta_out._flags = binst.rc();
       break;
     case 824:
@@ -703,7 +703,7 @@ void disasm_opcode_31(BinInst binst, MetaInst& meta_out) {
       meta_out._reads.push_back(binst.rs_w());
       meta_out._reads.push_back(binst.sh());
       meta_out._writes.push_back(binst.ra_w());
-      meta_out._writes.push_back(SPR::kXer);
+      meta_out._writes.push_back(XERBit::kCA);
       meta_out._flags = binst.rc();
       break;
     case 854:
@@ -751,14 +751,14 @@ void disasm_opcode_31(BinInst binst, MetaInst& meta_out) {
         meta_out._reads.push_back(binst.ra_w());
         meta_out._reads.push_back(binst.rb_w());
         meta_out._writes.push_back(binst.rd_w());
-        meta_out._writes.push_back(SPR::kXer);
+        meta_out._writes.push_back(XERBit::kCA);
         break;
       case 10:
         meta_out._op = InstOperation::kAddc;
         meta_out._reads.push_back(binst.ra_w());
         meta_out._reads.push_back(binst.rb_w());
         meta_out._writes.push_back(binst.rd_w());
-        meta_out._writes.push_back(SPR::kXer);
+        meta_out._writes.push_back(XERBit::kCA);
         break;
       case 40:
         meta_out._op = InstOperation::kSubf;
@@ -775,45 +775,45 @@ void disasm_opcode_31(BinInst binst, MetaInst& meta_out) {
         meta_out._op = InstOperation::kSubfe;
         meta_out._reads.push_back(binst.ra_w());
         meta_out._reads.push_back(binst.rb_w());
-        meta_out._reads.push_back(SPR::kXer);
+        meta_out._reads.push_back(XERBit::kCA);
         meta_out._writes.push_back(binst.rd_w());
-        meta_out._writes.push_back(SPR::kXer);
+        meta_out._writes.push_back(XERBit::kCA);
         break;
       case 138:
         meta_out._op = InstOperation::kAdde;
         meta_out._reads.push_back(binst.ra_w());
         meta_out._reads.push_back(binst.rb_w());
-        meta_out._reads.push_back(SPR::kXer);
+        meta_out._reads.push_back(XERBit::kCA);
         meta_out._writes.push_back(binst.rd_w());
-        meta_out._writes.push_back(SPR::kXer);
+        meta_out._writes.push_back(XERBit::kCA);
         break;
       case 200:
         meta_out._op = InstOperation::kSubfze;
         meta_out._reads.push_back(binst.ra_w());
-        meta_out._reads.push_back(SPR::kXer);
+        meta_out._reads.push_back(XERBit::kCA);
         meta_out._writes.push_back(binst.rd_w());
-        meta_out._writes.push_back(SPR::kXer);
+        meta_out._writes.push_back(XERBit::kCA);
         break;
       case 202:
         meta_out._op = InstOperation::kAddze;
         meta_out._reads.push_back(binst.ra_w());
-        meta_out._reads.push_back(SPR::kXer);
+        meta_out._reads.push_back(XERBit::kCA);
         meta_out._writes.push_back(binst.rd_w());
-        meta_out._writes.push_back(SPR::kXer);
+        meta_out._writes.push_back(XERBit::kCA);
         break;
       case 232:
         meta_out._op = InstOperation::kSubfme;
         meta_out._reads.push_back(binst.ra_w());
-        meta_out._reads.push_back(SPR::kXer);
+        meta_out._reads.push_back(XERBit::kCA);
         meta_out._writes.push_back(binst.rd_w());
-        meta_out._writes.push_back(SPR::kXer);
+        meta_out._writes.push_back(XERBit::kCA);
         break;
       case 234:
         meta_out._op = InstOperation::kAddme;
         meta_out._reads.push_back(binst.ra_w());
-        meta_out._reads.push_back(SPR::kXer);
+        meta_out._reads.push_back(XERBit::kCA);
         meta_out._writes.push_back(binst.rd_w());
-        meta_out._writes.push_back(SPR::kXer);
+        meta_out._writes.push_back(XERBit::kCA);
         break;
       case 235:
         meta_out._op = InstOperation::kMullw;
@@ -1199,14 +1199,14 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
       meta_out._reads.push_back(binst.ra_w());
       meta_out._reads.push_back(binst.simm());
       meta_out._writes.push_back(binst.rd_w());
-      meta_out._writes.push_back(SPR::kXer);
+      meta_out._writes.push_back(XERBit::kCA);
       break;
 
     case 10:
       meta_out._op = InstOperation::kCmpli;
       meta_out._reads.push_back(binst.ra_w());
       meta_out._reads.push_back(binst.uimm());
-      meta_out._reads.push_back(SPR::kXer);
+      meta_out._reads.push_back(XERBit::kSO);
       meta_out._writes.push_back(binst.crfd());
       meta_out._flags = binst.l();
       break;
@@ -1215,7 +1215,7 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
       meta_out._op = InstOperation::kCmpi;
       meta_out._reads.push_back(binst.ra_w());
       meta_out._reads.push_back(binst.simm());
-      meta_out._reads.push_back(SPR::kXer);
+      meta_out._reads.push_back(XERBit::kSO);
       meta_out._writes.push_back(binst.crfd());
       meta_out._flags = binst.l();
       break;
@@ -1225,7 +1225,7 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
       meta_out._reads.push_back(binst.ra_w());
       meta_out._reads.push_back(binst.simm());
       meta_out._writes.push_back(binst.rd_w());
-      meta_out._writes.push_back(SPR::kXer);
+      meta_out._writes.push_back(XERBit::kCA);
       break;
 
     case 13:
@@ -1233,7 +1233,7 @@ void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out) {
       meta_out._reads.push_back(binst.ra_w());
       meta_out._reads.push_back(binst.simm());
       meta_out._writes.push_back(binst.rd_w());
-      meta_out._writes.push_back(SPR::kXer);
+      meta_out._writes.push_back(XERBit::kCA);
       meta_out._flags = InstFlags::kWritesRecord;
       break;
 

@@ -12,6 +12,8 @@ add_library(decomp-lib
     hll/SemanticPreservingStructurizer.hh
     hll/Structurizer.cc
     hll/Structurizer.hh
+    hll/Untiling.cc
+    hll/Untiling.hh
     ir/GekkoTranslator.cc
     ir/GekkoTranslator.hh
     ir/IrInst.hh

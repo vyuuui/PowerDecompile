@@ -247,6 +247,13 @@ enum class TBR {
   kTbu = 269,
 };
 
+enum class XERBit {
+  kCA, // Carry
+  kOV, // Overflow
+  kSO, // Overflow summary
+  kBC, // 25-31
+};
+
 struct AuxImm {
   uint32_t _val;
   constexpr bool operator==(AuxImm rhs) const { return _val == rhs._val; }
@@ -314,8 +321,9 @@ using ReadSource = std::variant<GPRSlice,
   SIMM,
   UIMM,
   RelBranch,
-  AuxImm>;
-using WriteSource = std::variant<GPRSlice, FPRSlice, CrSlice, MemRegOff, MemRegReg, MultiReg, SPR, TBR, FPSCRBit>;
+  AuxImm,
+  XERBit>;
+using WriteSource = std::variant<GPRSlice, FPRSlice, CrSlice, MemRegOff, MemRegReg, MultiReg, SPR, TBR, FPSCRBit, XERBit>;
 
 constexpr bool is_memory_ref(ReadSource const& ds) {
   return std::holds_alternative<MemRegOff>(ds) || std::holds_alternative<MemRegReg>(ds);
