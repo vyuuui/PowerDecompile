@@ -85,7 +85,7 @@ void run_graph_analysis(Subroutine& routine, BinaryContext const& ctx, uint32_t 
 
       MetaInst inst = ram.read_instruction(inst_address);
       // The node isn't over if we're returning after the branch.
-      if (check_flags(inst._flags, InstFlags::kWritesLR)) {
+      if (check_flags(inst._sidefx, InstSideFx::kWritesLR)) {
         if (inst._op == InstOperation::kB) {
           graph->_direct_calls.emplace_back(inst.branch_target());
         }

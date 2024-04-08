@@ -240,17 +240,38 @@ enum class InstOperation {
 
 // BO (branch operation?) type, mapped from instruction encoding to mnemonic
 enum class BOType { kDnzf, kDzf, kF, kDnzt, kDzt, kT, kDnz, kDz, kAlways, kInvalid };
+enum class RlwimiOp { kNone, kInslwi, kInsrwi };
+struct SimplifiedRlwimi {
+  RlwimiOp _op;
+  uint8_t _n;
+  uint8_t _b;
+};
+
+enum class RlwinmOp { kNone, kExtlwi, kExtrwi, kRotlwi, kRotrwi, kSlwi, kSrwi, kClrlwi, kClrrwi, kClrlslwi };
+struct SimplifiedRlwinm {
+  RlwinmOp _op;
+  uint8_t _n;
+  uint8_t _b;
+};
+
+enum class RlwnmOp { kNone, kRotlw };
+struct SimplifiedRlwnm {
+  RlwnmOp _op;
+};
 
 struct MetaInst {
   BinInst _binst;
   uint32_t _va;
   // All data sources being read
-  reserved_vector<ReadSource, 4> _reads;
+  // Sources are ordered based on the operation being done if said operation is not commutative
+  reserved_vector<DataSource, 4> _reads;
   // Output location
-  reserved_vector<WriteSource, 2> _writes;
+  std::optional<DataSource> _write;
 
   InstOperation _op = InstOperation::kInvalid;
+  InstSideFx _sidefx = InstSideFx::kNone;
   InstFlags _flags = InstFlags::kNone;
+  FPSCRBit _fpcrsidefx = FPSCRBit::kNone;
 
   template <typename T>
   T get_read_op() const {
@@ -262,27 +283,22 @@ struct MetaInst {
     assert(false);
   }
 
-  template <typename T>
-  T get_write_op() const {
-    for (auto& ds : _writes) {
-      if (std::holds_alternative<T>(ds)) {
-        return std::get<T>(ds);
-      }
-    }
-    assert(false);
-  }
-
   bool is_blr() const;
 
   constexpr bool is_direct_branch() const { return _op == InstOperation::kB || _op == InstOperation::kBc; }
-  uint32_t branch_target() const {
+  constexpr uint32_t branch_target() const {
+    const uint32_t base = check_flags(_flags, InstFlags::kAbsoluteAddr) ? 0 : _va;
     if (_op == InstOperation::kB) {
-      return _va + std::get<RelBranch>(_reads[0])._rel_32;
+      return _va + _binst.li()._rel_32;
     } else if (_op == InstOperation::kBc) {
-      return _va + std::get<RelBranch>(_reads[2])._rel_32;
+      return _va + _binst.bd()._rel_32;
     }
     return 0;
   }
+
+  SimplifiedRlwimi simplified_rlwimi() const;
+  SimplifiedRlwinm simplified_rlwinm() const;
+  SimplifiedRlwnm simplified_rlwnm() const;
 };
 
 void disasm_single(uint32_t vaddr, uint32_t raw_inst, MetaInst& meta_out);

@@ -481,9 +481,9 @@ char const* opcode_flags_string(InstOperation opcode, BinInst inst) {
     case InstOperation::kSubfme:
     case InstOperation::kSubfze:
     case InstOperation::kXor:
-      if (live_oerc == (InstFlags::kWritesXER | InstFlags::kWritesRecord)) {
+      if (live_oerc == (InstFlags::kWritesOVSO | InstFlags::kWritesRecord)) {
         return "o.";
-      } else if (live_oerc == InstFlags::kWritesXER) {
+      } else if (live_oerc == InstFlags::kWritesOVSO) {
         return "o";
       } else if (live_oerc == InstFlags::kWritesRecord) {
         return ".";

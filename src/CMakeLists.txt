@@ -18,6 +18,8 @@ add_library(decomp-lib
     ir/GekkoTranslator.hh
     ir/IrInst.hh
     ir/RegisterBinding.hh
+    ir/SSATranslator.cc
+    ir/SSATranslator.hh
     ppc/BinaryContext.cc
     ppc/BinaryContext.hh
     ppc/BinInst.hh

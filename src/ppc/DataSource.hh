@@ -103,12 +103,71 @@ constexpr bool operator>=(CRField l, CRField r) { return static_cast<int>(l) >= 
 constexpr bool operator<(CRField l, CRField r) { return static_cast<int>(l) < static_cast<int>(r); }
 constexpr bool operator<=(CRField l, CRField r) { return static_cast<int>(l) <= static_cast<int>(r); }
 
+enum class CRBit : uint8_t {
+  kCr0Lt,
+  kCr0Gt,
+  kCr0Eq,
+  kCr0So,
+  kCr1Lt,
+  kCr1Gt,
+  kCr1Eq,
+  kCr1So,
+  kCr2Lt,
+  kCr2Gt,
+  kCr2Eq,
+  kCr2So,
+  kCr3Lt,
+  kCr3Gt,
+  kCr3Eq,
+  kCr3So,
+  kCr4Lt,
+  kCr4Gt,
+  kCr4Eq,
+  kCr4So,
+  kCr5Lt,
+  kCr5Gt,
+  kCr5Eq,
+  kCr5So,
+  kCr6Lt,
+  kCr6Gt,
+  kCr6Eq,
+  kCr6So,
+  kCr7Lt,
+  kCr7Gt,
+  kCr7Eq,
+  kCr7So,
+
+  // Overlaps with standard CR1 usage
+  kCr1Fx = 4,
+  kCr1Fex = 5,
+  kCr1Vx = 6,
+  kCr1Ox = 7,
+};
+
+constexpr bool operator>(CRBit l, CRBit r) { return static_cast<int>(l) > static_cast<int>(r); }
+constexpr bool operator>=(CRBit l, CRBit r) { return static_cast<int>(l) >= static_cast<int>(r); }
+constexpr bool operator<(CRBit l, CRBit r) { return static_cast<int>(l) < static_cast<int>(r); }
+constexpr bool operator<=(CRBit l, CRBit r) { return static_cast<int>(l) <= static_cast<int>(r); }
+
+constexpr CRBit gt_bit(CRField field) {
+  return static_cast<CRBit>(static_cast<uint8_t>(field) * 4);
+}
+constexpr CRBit lt_bit(CRField field) {
+  return static_cast<CRBit>(static_cast<uint8_t>(field) * 4 + 1);
+}
+constexpr CRBit eq_bit(CRField field) {
+  return static_cast<CRBit>(static_cast<uint8_t>(field) * 4 + 2);
+}
+constexpr CRBit so_bit(CRField field) {
+  return static_cast<CRBit>(static_cast<uint8_t>(field) * 4 + 3);
+}
+
 //////////////////////////////
 // Predefined register sets //
 //////////////////////////////
 using GprSet = RegSet<GPR>;
 using FprSet = RegSet<FPR>;
-using CrSet = RegSet<CRField>;
+using CrSet = RegSet<CRBit>;
 
 constexpr GprSet kAllGprs = GprSet(0xffffffff);
 constexpr FprSet kAllFprs = FprSet(0xffffffff);
@@ -122,7 +181,7 @@ template <FPR... gprs>
 constexpr FprSet fpr_mask_literal() {
   return FprSet{(0u | ... | (1 << static_cast<uint8_t>(gprs)))};
 }
-template <CRField... gprs>
+template <CRBit... gprs>
 constexpr CrSet cr_mask_literal() {
   return CrSet{(0u | ... | (1 << static_cast<uint8_t>(gprs)))};
 }
@@ -179,24 +238,6 @@ struct FPRSlice {
   constexpr bool operator==(FPRSlice rhs) const { return _reg == rhs._reg && _type == rhs._type; }
 };
 
-struct CrSlice {
-  static constexpr CrSlice from_bitnum(uint32_t bitnum) {
-    return CrSlice {
-      ._bits = static_cast<uint8_t>(1 << (bitnum & 3)),
-      ._field = static_cast<CRField>(bitnum >> 2),
-    };
-  }
-  static constexpr CrSlice from_fieldnum(uint32_t fieldnum) {
-    return CrSlice {
-      ._bits = 0b1111,
-      ._field = static_cast<CRField>(fieldnum),
-    };
-  }
-  uint8_t _bits : 4;
-  CRField _field : 3;
-  constexpr bool operator==(CrSlice rhs) const { return _bits == rhs._bits && _field == rhs._field; }
-};
-
 struct MemRegOff {
   GPR _base : 5;
   DataType _type : 3;
@@ -248,10 +289,10 @@ enum class TBR {
 };
 
 enum class XERBit {
-  kCA, // Carry
-  kOV, // Overflow
-  kSO, // Overflow summary
-  kBC, // 25-31
+  kCA,  // Carry
+  kOV,  // Overflow
+  kSO,  // Overflow summary
+  kBC,  // 25-31
 };
 
 struct AuxImm {
@@ -297,21 +338,41 @@ enum class FPSCRBit : uint32_t {
 GEN_FLAG_OPERATORS(FPSCRBit)
 
 enum class InstFlags : uint32_t {
-  kNone = 0b0000000,
-  kAll = 0b1111110,
-  kWritesRecord = 0b000001,
-  kWritesXER = 0b000010,
-  kWritesLR = 0b000100,
-  kAbsoluteAddr = 0b001000,
-  kPsLoadsOne = 0b010000,
-  kLongMode = 0b100000,
-  kWritesFpRecord = 0b1000000,
+  kNone = 0b000,
+  kAll = 0b000,
+  kAbsoluteAddr = 0b001,
+  kPsLoadsOne = 0b010,
+  kLongMode = 0b100,
 };
 GEN_FLAG_OPERATORS(InstFlags)
 
-using ReadSource = std::variant<GPRSlice,
+enum class InstSideFx : uint32_t {
+  kNone = 0b000000,
+  kAll = 0b111111,
+  // Effectively executes `cmpwi cr0, rD, 0`
+  //  - Arithmetic instructions with the `.` suffix
+  kWritesRecord = 0b000001,
+  // Writes the FP exception info to CR1
+  //  - FP Arithmetic instructions with the `.` suffix
+  kWritesFpRecord = 0b000010,
+  // Checks if the arithmetic result overflowed, saving the result to XER[OV] and XER[SO]
+  //  - Arithmetic instructions with the o suffix
+  kWritesOVSO = 0b000100,
+  // Effectively executes `add ra, ra, rb` or `addi ra, ra, d`
+  //  - Updating load/store instructions (e.g. stwu, lwzu)
+  kWritesBaseReg = 0b001000,
+  // Writes the next PC to the LR
+  //  - Branches with LK bit
+  kWritesLR = 0b010000,
+  // Checks if the arithmetic result carried, saving the result to XER[CA]
+  kWritesCA = 0b100000,
+};
+GEN_FLAG_OPERATORS(InstSideFx)
+
+using DataSource = std::variant<GPRSlice,
   FPRSlice,
-  CrSlice,
+  CRField,
+  CRBit,
   MemRegOff,
   MemRegReg,
   MultiReg,
@@ -323,12 +384,8 @@ using ReadSource = std::variant<GPRSlice,
   RelBranch,
   AuxImm,
   XERBit>;
-using WriteSource = std::variant<GPRSlice, FPRSlice, CrSlice, MemRegOff, MemRegReg, MultiReg, SPR, TBR, FPSCRBit, XERBit>;
 
-constexpr bool is_memory_ref(ReadSource const& ds) {
-  return std::holds_alternative<MemRegOff>(ds) || std::holds_alternative<MemRegReg>(ds);
-}
-constexpr bool is_memory_ref(WriteSource const& ds) {
+constexpr bool is_memory_ref(DataSource const& ds) {
   return std::holds_alternative<MemRegOff>(ds) || std::holds_alternative<MemRegReg>(ds);
 }
 }  // namespace decomp::ppc

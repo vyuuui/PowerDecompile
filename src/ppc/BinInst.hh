@@ -36,17 +36,17 @@ public:
   // Short relative branch distance
   constexpr RelBranch bd() const { return RelBranch{ext_range_signed(16, 29) << 2}; }
   // Bit to use for conditional branch
-  constexpr CrSlice bi() const { return CrSlice::from_bitnum(ext_range(11, 15)); }
+  constexpr CRBit bi() const { return static_cast<CRBit>(ext_range(11, 15)); }
   // Branch options for conditional branch
   constexpr AuxImm bo() const { return AuxImm{ext_range(6, 10)}; }
 
   // CR bit numbers
-  constexpr CrSlice crba() const { return CrSlice::from_bitnum(ext_range(11, 15)); }
-  constexpr CrSlice crbb() const { return CrSlice::from_bitnum(ext_range(16, 20)); }
-  constexpr CrSlice crbd() const { return CrSlice::from_bitnum(ext_range(6, 10)); }
+  constexpr CRBit crba() const { return static_cast<CRBit>(ext_range(11, 15)); }
+  constexpr CRBit crbb() const { return static_cast<CRBit>(ext_range(16, 20)); }
+  constexpr CRBit crbd() const { return static_cast<CRBit>(ext_range(6, 10)); }
   // CR field numbers
-  constexpr CrSlice crfd() const { return CrSlice::from_fieldnum(ext_range(6, 8)); }
-  constexpr CrSlice crfs() const { return CrSlice::from_fieldnum(ext_range(11, 13)); }
+  constexpr CRField crfd() const { return static_cast<CRField>(ext_range(6, 8)); }
+  constexpr CRField crfs() const { return static_cast<CRField>(ext_range(11, 13)); }
   // Floating point registers
   constexpr FPR fra() const { return static_cast<FPR>(ext_range(11, 15)); }
   constexpr FPR frb() const { return static_cast<FPR>(ext_range(16, 20)); }
@@ -113,16 +113,16 @@ public:
   // Unsigned 16-bit immediate
   constexpr UIMM uimm() const { return UIMM{static_cast<uint16_t>(ext_range(16, 31))}; }
 
+  // Bits reflecting side effects
+  constexpr InstSideFx oe() const { return ext_range(30, 30) ? InstSideFx::kWritesOVSO : InstSideFx::kNone; }
+  constexpr InstSideFx rc() const { return ext_range(31, 31) ? InstSideFx::kWritesRecord : InstSideFx::kNone; }
+  constexpr InstSideFx lk() const { return ext_range(31, 31) ? InstSideFx::kWritesLR : InstSideFx::kNone; }
+  constexpr InstSideFx rc_fp() const { return ext_range(31, 31) ? InstSideFx::kWritesFpRecord : InstSideFx::kNone; }
+
   // Flag fields
-  constexpr InstFlags oe() const { return ext_range(30, 30) ? InstFlags::kWritesXER : InstFlags::kNone; }
-  constexpr InstFlags rc() const { return ext_range(31, 31) ? InstFlags::kWritesRecord : InstFlags::kNone; }
   constexpr InstFlags aa() const { return ext_range(30, 30) ? InstFlags::kAbsoluteAddr : InstFlags::kNone; }
-  constexpr InstFlags lk() const { return ext_range(31, 31) ? InstFlags::kWritesLR : InstFlags::kNone; }
   constexpr InstFlags w() const { return ext_range(21, 21) ? InstFlags::kPsLoadsOne : InstFlags::kNone; }
   constexpr InstFlags l() const { return ext_range(10, 10) ? InstFlags::kLongMode : InstFlags::kNone; }
-  constexpr InstFlags rc_fp() const {
-    return ext_range(31, 31) ? InstFlags::kWritesRecord | InstFlags::kWritesFpRecord : InstFlags::kNone;
-  }
 
   // Partially completed fields
   constexpr int16_t d16() const { return ext_range_signed(16, 31); }
@@ -176,5 +176,20 @@ public:
   // PS flags
   constexpr uint8_t l_val() const { return ext_range(10, 10); }
   constexpr uint8_t w_val() const { return ext_range(21, 21); }
+
+  // Combined memory operands
+  constexpr MemRegOff mem_off16_b() const { return MemRegOff{ra(), DataType::kS1, d16()}; }
+  constexpr MemRegOff mem_off16_h() const { return MemRegOff{ra(), DataType::kS2, d16()}; }
+  constexpr MemRegOff mem_off16_w() const { return MemRegOff{ra(), DataType::kS4, d16()}; }
+  constexpr MemRegOff mem_off16_s() const { return MemRegOff{ra(), DataType::kSingle, d16()}; }
+  constexpr MemRegOff mem_off16_d() const { return MemRegOff{ra(), DataType::kDouble, d16()}; }
+  constexpr MemRegOff mem_off20_p() const { return MemRegOff{ra(), DataType::kPackedSingle, d20()}; }
+
+  constexpr MemRegReg mem_reg_b() const { return MemRegReg{ra(), DataType::kS1, rb()}; }
+  constexpr MemRegReg mem_reg_h() const { return MemRegReg{ra(), DataType::kS2, rb()}; }
+  constexpr MemRegReg mem_reg_w() const { return MemRegReg{ra(), DataType::kS4, rb()}; }
+  constexpr MemRegReg mem_reg_s() const { return MemRegReg{ra(), DataType::kSingle, rb()}; }
+  constexpr MemRegReg mem_reg_d() const { return MemRegReg{ra(), DataType::kDouble, rb()}; }
+  constexpr MemRegReg mem_reg_p() const { return MemRegReg{ra(), DataType::kPackedSingle, rb()}; }
 };
 }  // namespace decomp::ppc

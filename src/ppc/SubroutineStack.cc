@@ -125,7 +125,7 @@ void SubroutineStack::analyze_sp_mem_read(MetaInst const& inst) {
 }
 
 void SubroutineStack::analyze_sp_mem_write(MetaInst const& inst) {
-  analyze_readwrite(inst, inst.get_write_op<MemRegOff>(), ReferenceType::kWrite);
+  analyze_readwrite(inst, std::get<MemRegOff>(*inst._write), ReferenceType::kWrite);
 }
 
 void SubroutineStack::analyze_sp_mem_ref(MetaInst const& inst) {
@@ -150,7 +150,7 @@ void SubroutineStack::analyze_sp_modify(MetaInst const& inst) {
   if (inst._op == InstOperation::kAddi) {
     // TODO: stash the stack restore location somewhere
   } else if (inst._op == InstOperation::kStwu) {
-    _stack_size = static_cast<uint16_t>(-inst.get_write_op<MemRegOff>()._offset);
+    _stack_size = static_cast<uint16_t>(-std::get<MemRegOff>(*inst._write)._offset);
   }
 }
 
