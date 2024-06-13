@@ -30,6 +30,7 @@ enum class ACNType {
   If,
   IfElse,
   IfElseIf,
+  CCond,
   Switch,
   DoWhile,
   While,
@@ -90,6 +91,31 @@ struct IfElse : StaticTypedACN<ACNType::IfElse> {
 struct IfElseIf : StaticTypedACN<ACNType::IfElseIf> {
   std::vector<std::pair<AbstractControlNode*, AbstractControlNode*>> _conds;
   std::optional<AbstractControlNode*> _fallthrough;
+};
+
+struct CCond : StaticTypedACN<ACNType::CCond> {
+  enum class BoolOp {
+    kAnd, kOr
+  };
+  struct CCondNode {
+    std::variant<AbstractControlNode*, int> _lhs;
+    std::variant<AbstractControlNode*, int> _rhs;
+    bool _inv_rhs;
+    BoolOp _op;
+  };
+  std::vector<CCondNode> _nodes;
+
+  int put(std::variant<AbstractControlNode*, int> l,
+               std::variant<AbstractControlNode*, int> r,
+               bool inv_rhs, BoolOp op) {
+    _nodes.push_back(CCondNode {
+      ._lhs = l,
+      ._rhs = r,
+      ._inv_rhs = inv_rhs,
+      ._op = op,
+    });
+    return static_cast<int>(_nodes.size() - 1);
+  }
 };
 
 // Switch schema

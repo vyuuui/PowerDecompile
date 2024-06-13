@@ -4,6 +4,7 @@
 #include <concepts>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -55,6 +56,8 @@ struct FlowVertexBase {
   bool single_succ() const { return _out.size() == 1; }
   bool single_pred() const { return _in.size() == 1; }
   bool sess() const { return single_succ() && single_pred(); }
+  // Inverse conditional binary split
+  bool icbs() const { return _out.size() == 2 && inverse_condition(_out[0]._tr, _out[1]._tr); }
 };
 
 class FlowGraphBase {
@@ -72,6 +75,7 @@ protected:
   void add_existing_vertex(FlowVertexBase* v) { _vtx.emplace_back(v); }
   void set_root(int id) { _root_id = id; }
   void set_terminal(int id) { _terminal_id = id; }
+  void substitute_pair_existing(std::pair<int, int> vsub, FlowVertexBase* v);
 
 public:
   inline static constexpr int kInvalidVertexId = -1;
@@ -89,6 +93,16 @@ public:
 
   std::vector<int> compute_dom_tree();
   std::vector<int> compute_pdom_tree();
+
+  // Removes all links of a node, but does not deallocate it
+  void detach(FlowVertexBase* v);
+
+  void emplace_link(FlowVertexBase* from, FlowVertexBase* to, BlockTransfer tr) {
+    from->_out.emplace_back(to->_idx, tr);
+    to->_in.emplace_back(from->_idx, tr);
+  }
+
+  void emplace_link(int from_idx, int to_idx, BlockTransfer tr) { emplace_link(vertex(from_idx), vertex(to_idx), tr); }
 
   template <bool Forward, typename R, typename Visitor>
     requires invocable_r<R, Visitor, FlowVertexBase const&, R>
@@ -138,6 +152,38 @@ public:
       for (auto [target, _] : (Forward ? vert->_out : vert->_in)) {
         if (!visited[target]) {
           process_stack.emplace_back(vertex(target), feedforward);
+        }
+      }
+    }
+  }
+
+  template <typename Visitor>
+    requires std::invocable<Visitor, FlowVertexBase&>
+  void preorder_until(Visitor&& visitor, FlowVertexBase* from, FlowVertexBase* to) {
+    std::vector<bool> visited(size());
+    std::vector<FlowVertexBase*> process_stack;
+
+    process_stack.emplace_back(from);
+
+    while (!process_stack.empty()) {
+      FlowVertexBase* vert = process_stack.back();
+      process_stack.pop_back();
+
+      if (visited[vert->_idx]) {
+        continue;
+      }
+      if (vert->_idx == to->_idx) {
+        continue;
+      }
+      visited[vert->_idx] = true;
+
+      if (!visitor(*vert)) {
+        break;
+      }
+
+      for (auto [target, _] : vert->_out) {
+        if (!visited[target]) {
+          process_stack.emplace_back(vertex(target));
         }
       }
     }
@@ -328,28 +374,13 @@ public:
     return newv->_idx;
   }
 
-  void emplace_link(Vertex* from, Vertex* to, BlockTransfer tr) {
-    from->_out.emplace_back(to->_idx, tr);
-    to->_in.emplace_back(from->_idx, tr);
-  }
-
-  void emplace_link(int from_idx, int to_idx, BlockTransfer tr) { emplace_link(vertex(from_idx), vertex(to_idx), tr); }
-
-  // Removes all links of a node, but does not deallocate it
-  void detach(Vertex* v) {
-    for (auto [target, _] : v->_out) {
-      Vertex* succ = vertex(target);
-      succ->_in.erase(
-        std::find_if(succ->_in.begin(), succ->_in.end(), [v](EdgeData const& ed) { return ed._target == v->_idx; }));
-    }
-    for (auto [target, _] : v->_in) {
-      Vertex* pred = vertex(target);
-      pred->_out.erase(
-        std::find_if(pred->_out.begin(), pred->_out.end(), [v](EdgeData const& ed) { return ed._target == v->_idx; }));
-    }
-    v->_out.clear();
-    v->_in.clear();
-    v->_detached = true;
+  template <typename... VDArgs>
+    requires std::constructible_from<VertexData, VDArgs...>
+  int substitute_pair(std::pair<int, int> vsub, VDArgs&&... args) {
+    Vertex* newv = new Vertex(size());
+    newv->_d.template emplace<VertexData>(std::forward<VDArgs>(args)...);
+    substitute_pair_existing(vsub, newv);
+    return newv->_idx;
   }
 
   // Insert a new node between `before` and all of its outgoing links
@@ -380,7 +411,13 @@ public:
   void foreach_real(Visitor&& visitor) const {
     for (size_t i = 0; i < size(); i++) {
       if (vertex(i)->is_real() && !vertex(i)->_detached) {
-        visitor(*vertex(i));
+        if constexpr (std::is_same_v<bool, std::invoke_result_t<Visitor, Vertex const&>>) {
+          if (!visitor(*vertex(i))) {
+            break;
+          }
+        } else {
+          visitor(*vertex(i));
+        }
       }
     }
   }
@@ -389,7 +426,13 @@ public:
   void foreach_real(Visitor&& visitor) {
     for (size_t i = 0; i < size(); i++) {
       if (vertex(i)->is_real() && !vertex(i)->_detached) {
-        visitor(*vertex(i));
+        if constexpr (std::is_same_v<bool, std::invoke_result_t<Visitor, Vertex&>>) {
+          if (!visitor(*vertex(i))) {
+            break;
+          }
+        } else {
+          visitor(*vertex(i));
+        }
       }
     }
   }
@@ -661,6 +704,47 @@ public:
       v->_out = rhsv._out;
       v->_in = rhsv._out;
       generator(rhsv, *v);
+    }
+  }
+
+  template <typename RhsVertexData, typename Generator>
+    requires std::invocable<Generator, FlowVertex<RhsVertexData>&, Vertex&>
+  void generate_between(Generator&& generator,
+    FlowGraph<RhsVertexData>* gr,
+    FlowVertex<RhsVertexData>* v0,
+    FlowVertex<RhsVertexData>* v1) {
+    // TODO: remove this
+    assert(size() == 2);
+
+    std::vector<uint32_t> forwardref(size(), -1);
+    std::vector<std::optional<uint32_t>> backref(gr->size());
+    gr->preorder_until(
+      [this, &forwardref, &backref](FlowVertex<RhsVertexData>& vk) {
+        int newv = emplace_pseudovertex(PseudoVertexType::kUninitialized);
+        forwardref.push_back(vk._idx);
+        backref[vk._idx] = newv;
+      },
+      v0,
+      v1);
+    emplace_link(root()->_idx, *backref[v0->_idx], BlockTransfer::kUnconditional);
+    emplace_link(*backref[v1->_idx], terminal()->_idx, BlockTransfer::kUnconditional);
+
+    for (Vertex& newv : *this) {
+      if (newv.is_pseudo() && std::get<PseudoVertexType>(newv._d) == PseudoVertexType::kUninitialized) {
+        FlowVertex<RhsVertexData>* vk = gr->vertex(forwardref[newv._idx]);
+        for (auto [target, tr] : vk->_out) {
+          if (backref[target]) {
+            emplace_link(newv._idx, target, tr);
+          }
+        }
+      }
+    }
+
+    for (Vertex& newv : *this) {
+      if (newv.is_pseudo() && std::get<PseudoVertexType>(newv._d) == PseudoVertexType::kUninitialized) {
+        FlowVertex<RhsVertexData>* vk = gr->vertex(forwardref[newv._idx]);
+        generator(*vk, newv);
+      }
     }
   }
 };

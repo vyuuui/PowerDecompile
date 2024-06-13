@@ -5,6 +5,56 @@
 #include <vector>
 
 namespace decomp {
+void FlowGraphBase::substitute_pair_existing(std::pair<int, int> vsub, FlowVertexBase* v) {
+  std::vector<EdgeData> inlist;
+  std::vector<EdgeData> outlist;
+  std::vector<bool> invis(size());
+  std::vector<bool> outvis(size());
+
+  for (int vi : {vsub.first, vsub.second}) {
+    FlowVertexBase* fvi = vertex(vi);
+    for (EdgeData ed : fvi->_in) {
+      if (ed._target != vsub.first && ed._target != vsub.second && !invis[ed._target]) {
+        inlist.push_back(ed);
+        invis[ed._target] = true;
+      }
+    }
+    for (EdgeData ed : fvi->_out) {
+      if (ed._target != vsub.first && ed._target != vsub.second && !outvis[ed._target]) {
+        inlist.push_back(ed);
+        outvis[ed._target] = true;
+      }
+    }
+  }
+
+  detach(vertex(vsub.first));
+  detach(vertex(vsub.second));
+
+  add_existing_vertex(v);
+  for (EdgeData ed : inlist) {
+    emplace_link(ed._target, v->_idx, ed._tr);
+  }
+  for (EdgeData ed : outlist) {
+    emplace_link(v->_idx, ed._target, ed._tr);
+  }
+}
+
+void FlowGraphBase::detach(FlowVertexBase* v) {
+  for (auto [target, _] : v->_out) {
+    FlowVertexBase* succ = vertex(target);
+    succ->_in.erase(
+      std::find_if(succ->_in.begin(), succ->_in.end(), [v](EdgeData const& ed) { return ed._target == v->_idx; }));
+  }
+  for (auto [target, _] : v->_in) {
+    FlowVertexBase* pred = vertex(target);
+    pred->_out.erase(
+      std::find_if(pred->_out.begin(), pred->_out.end(), [v](EdgeData const& ed) { return ed._target == v->_idx; }));
+  }
+  v->_out.clear();
+  v->_in.clear();
+  v->_detached = true;
+}
+
 class DisjointSet {
 public:
   DisjointSet(size_t len) : _ds(len) { std::iota(_ds.begin(), _ds.end(), 0); }
