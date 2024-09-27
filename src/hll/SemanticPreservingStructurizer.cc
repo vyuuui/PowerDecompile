@@ -1,51 +1,17 @@
 #include "hll/SemanticPreservingStructurizer.hh"
 
 #include <algorithm>
+#include <deque>
 #include <iterator>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#include "hll/GraphSubstitution.hh"
 #include "utl/FlowGraph.hh"
 #include "utl/ReservedVector.hh"
 
 namespace decomp::hll {
-namespace {
-using ACNVertex = FlowVertex<AbstractControlNode*>;
-using ACNGraph = FlowGraph<AbstractControlNode*>;
-
-struct SeqSubstitution {
-  std::vector<ACNVertex*> _list;
-};
-
-struct IfSubstitution {
-  ACNVertex* _hdr;
-  ACNVertex* _true;
-  ACNVertex* _next;
-};
-
-struct IfElseSubstitution {
-  ACNVertex* _hdr;
-  ACNVertex* _true;
-  ACNVertex* _false;
-  ACNVertex* _next;
-};
-
-struct CCondSubstitution {
-  std::vector<ACNVertex*> _list;
-  ACNVertex* _shortcircuit;
-  ACNVertex* _alternative;
-  ACNVertex* _next;
-};
-
-struct SwitchSubstitution {
-  ACNVertex* _hdr;
-  std::vector<ACNVertex*> _list;
-};
-
-using AcyclicSubstitution =
-  std::variant<SeqSubstitution, IfSubstitution, IfElseSubstitution, CCondSubstitution, SwitchSubstitution>;
-
 struct SPSState {
   ACNGraph _gr;
   std::unordered_map<AbstractControlNode*, AbstractControlNode*> _structof;
@@ -54,181 +20,280 @@ struct SPSState {
   std::vector<int> _pdom;
 };
 
-enum class RefinementSuggestion {
-  kRefineSwitch,
-  kRefineGeneric,
-};
-
-using AcyclicResult = Either<RefinementSuggestion, std::pair<AbstractControlNode*, AcyclicSubstitution>>;
-
-// Precondition: vert is a binary split
-AcyclicResult compound_boolean(SPSState& state, ACNVertex& vert) {
-  CCondSubstitution substitutions;
-  ACNGraph& gr = state._gr;
-  // Compound conditionals cover a region between a postdominator and its dominator, termed here the "root" and "term"
-  // This region's term node should have at least one predecessor which is a single-exit node (implied to be the if/else
-  // block) This region's internal nodes should all be ICBS and have the term node be the immediate post-dominator aside
-  // from the one or two case nodes
-
-  // First presume that this is a ccond region by finding its bounds
-  ACNVertex* term = gr.vertex(state._pdom[vert._idx]);
-  ACNVertex* root = gr.vertex(state._dom[term->_idx]);
-
-  // Check that the term node has at least one incoming case node
-  bool is_exit_node = false;
-  gr.foreach_real_inedge(
-    [&is_exit_node](ACNVertex const& v) {
-      if (v._out.size() == 1) {
-        is_exit_node = true;
-      }
-    },
-    term);
-  if (!is_exit_node) {
-    return RefinementSuggestion::kRefineGeneric;
-  }
-
-  using ReduceGraph = FlowGraph<std::variant<ACNVertex*, int>>;
-  using ReduceVertex = FlowVertex<std::variant<ACNVertex*, int>>;
-  ReduceGraph ccond_gr;
-  ccond_gr.generate_between([&ccond_gr](ACNVertex& vsrc, ReduceVertex& vdst) { vdst._d = &vsrc; }, &gr, root, term);
-
-  int case_count = 0;
-  bool is_valid_cc_region = true;
-  // Ensure that the subgraph representing this presumed ccond region is well formed
-  ccond_gr.foreach_real([&ccond_gr, &state, term, &case_count, &is_valid_cc_region, &substitutions](ReduceVertex& rv) {
-    ACNVertex* v = std::get<ACNVertex*>(rv.data());
-    // This will pick out internal nodes
-    if (v->icbs() && state._pdom[v->_idx] == term->_idx) {
-      substitutions._list.push_back(v);
-      return;
-    }
-    // This will pick out the term
-    if (v == term) {
-      return;
-    }
-    // This will pick out the 1 or 2 case nodes
-    if (v->_out.size() == 1 && v->_out[0]._target == term->_idx) {
-      case_count++;
-      // Having more than two case nodes would imply this is a proper region
-      if (case_count > 2) {
-        is_valid_cc_region = false;
-      }
-    }
-    // Having any other node type would imply this is a proper region, or needs further reducing beforehand
-    is_valid_cc_region = false;
-  });
-
-  if (!is_valid_cc_region) {
-    return RefinementSuggestion::kRefineGeneric;
-  }
-
-  // Given that this is a CCond, we can begin the reduction process of the internal nodes
-  struct ReduceData {
-    ReduceVertex* _n0;
-    ReduceVertex* _n1;
-    EdgeData _n0_n1;
-    EdgeData _n0_n2;
-    EdgeData _n1_n2;
-    EdgeData _n1_n3;
-  };
-  CCond cond_node;
-  bool changed;
-  while (true) {
-    changed = false;
-    std::optional<ReduceData> rdata;
-    ccond_gr.foreach_real([&gr, &ccond_gr, &rdata](ReduceVertex& reduce_candidate) {
-      auto e0 = reduce_candidate._out[0];
-      auto e1 = reduce_candidate._out[1];
-      auto v0 = gr.vertex(e0._target);
-      auto v1 = gr.vertex(e1._target);
-      if (v0->icbs() && v0->_out[0]._target == e1._target) {
-        rdata = ReduceData{
-          ._n0_n1 = e0,
-          ._n0_n2 = e1,
-          ._n1_n2 = v0->_out[0],
-          ._n1_n3 = v0->_out[1],
-        };
-      } else if (v0->icbs() && v0->_out[1]._target == e1._target) {
-        rdata = ReduceData{
-          ._n0_n1 = e0,
-          ._n0_n2 = e1,
-          ._n1_n2 = v0->_out[1],
-          ._n1_n3 = v0->_out[0],
-        };
-      } else if (v1->icbs() && v1->_out[0]._target == e0._target) {
-        rdata = ReduceData{
-          ._n0_n1 = e1,
-          ._n0_n2 = e0,
-          ._n1_n2 = v1->_out[0],
-          ._n1_n3 = v1->_out[1],
-        };
-      } else if (v1->icbs() && v1->_out[1]._target == e0._target) {
-        rdata = ReduceData{
-          ._n0_n1 = e1,
-          ._n0_n2 = e0,
-          ._n1_n2 = v1->_out[1],
-          ._n1_n3 = v1->_out[0],
-        };
-      }
-
-      if (rdata) {
-        rdata->_n0 = &reduce_candidate;
-        rdata->_n1 = ccond_gr.vertex(rdata->_n0_n1._target);
-        return false;
-      }
-      return true;
-    });
-
-    if (!rdata) {
-      break;
-    }
-
-    constexpr auto get_rv_data = [](ReduceVertex* rv) -> std::variant<AbstractControlNode*, int> {
-      if (std::holds_alternative<ACNVertex*>(rv->data())) {
-        return std::get<ACNVertex*>(rv->data())->data();
-      } else {
-        return std::get<int>(rv->data());
-      }
-    };
-
-    int new_cond_tree_vtx = cond_node.put(get_rv_data(rdata->_n0),
-      get_rv_data(rdata->_n1),
-      // If the short-circuit path condition does not match the fallback condition, then its condition must be inverted
-      rdata->_n0_n2._tr != rdata->_n1_n2._tr,
-      // If the short-circuit path occurs when true, presume the condition to be an or, otherwise an and
-      rdata->_n0_n2._tr == BlockTransfer::kConditionTrue ? CCond::BoolOp::kOr : CCond::BoolOp::kAnd);
-    ccond_gr.substitute_pair(std::make_pair(rdata->_n0->_idx, rdata->_n1->_idx), new_cond_tree_vtx);
-  }
-
-  return std::make_pair<AbstractControlNode*, AcyclicSubstitution>(new CCond(std::move(cond_node)), substitutions);
+template <typename T, typename... Us>
+std::unique_ptr<T> build_substitutor(AbstractControlNode* node, SPSState& state, Us&&... args) {
+  return std::make_unique<T>(node, state._gr, state._dom, state._pdom, std::forward<Us>(args)...);
 }
 
-AcyclicResult acyclic_region_type(SPSState& state, ACNVertex& vert) {
+class OutputSet {
+  struct Entry {
+    int _ct;
+    int _next;
+    int _prev;
+  };
+  std::vector<Entry> _set;
+  int _fst = -1;
+  int _lst = -1;
+  int _sz = 0;
+
+public:
+  OutputSet(int cap) : _set(cap, Entry{0, 0}) {}
+
+  constexpr int size() const { return _sz; }
+
+  bool contains(int num) const { return _set[num]._ct > 0; }
+
+  void add(int num) {
+    Entry& e = _set[num];
+    if (e._ct++ > 0) {
+      return;
+    }
+
+    e._prev = _lst;
+    e._next = -1;
+    if (_sz++ == 0) {
+      _fst = _lst = num;
+    } else {
+      _set[_lst]._next = num;
+      _lst = num;
+    }
+  }
+
+  void remove(int num) {
+    Entry& e = _set[num];
+    if (--e._ct > 0) {
+      return;
+    }
+
+    if (e._prev != -1) {
+      _set[e._prev]._next = e._next;
+    } else {
+      _fst = e._next;
+    }
+
+    if (e._next != -1) {
+      _set[e._next]._prev = e._prev;
+    } else {
+      _lst = e._prev;
+    }
+    _sz--;
+  }
+
+  class iterator {
+    std::vector<Entry> const& _eref;
+    int _node;
+
+  public:
+    iterator(std::vector<Entry> const& eref, int start) : _eref(eref), _node(start) {}
+
+    iterator& operator++() {
+      _node = _eref[_node]._next;
+      return *this;
+    }
+    iterator& operator--() {
+      _node = _eref[_node]._prev;
+      return *this;
+    }
+    int& operator*() { return _node; }
+    int operator*() const { return _node; }
+    constexpr bool operator==(iterator const& rhs) const { return _node == rhs._node; }
+  };
+
+  iterator begin() const { return iterator(_set, _fst); }
+  iterator end() const { return iterator(_set, -1); }
+};
+
+// This algorithm is an implementation of the following paper:
+// Tao Wei, Jian Mao, Wei Zou, and Yu Chen. 2007. Structuring 2-way Branches in Binary Executables. In Proceedings of
+// the 31st Annual International Computer Software and Applications Conference - Volume 01 (COMPSAC '07). IEEE Computer
+// Society, USA, 115–118. https://doi.org/10.1109/COMPSAC.2007.203
+std::unique_ptr<Substitutor> complex_conditional_type(SPSState& state, ACNVertex& vert) {
+  // This covers one of either
+  //   A compound conditional (short-circuited boolean expressions)
+  //   A cascading conditional (sparse switch)
+  // Judging cascading conditionals is dependant on better dataflow anlysis, so leaving it as a to-do
+  constexpr auto try_compound_conditional = [](SPSState& state, ACNVertex& vert) -> std::unique_ptr<Substitutor> {
+    ACNGraph& gr = state._gr;
+    // Expansion phase
+    std::vector<ACNVertex*> pord;
+    std::vector<bool> in_pord(gr.size());
+    OutputSet outset(gr.size());
+    std::deque<int> pend;
+    pord.push_back(&vert);
+    in_pord[vert._idx] = true;
+    pend.push_back(vert._out[0]._target);
+    pend.push_back(vert._out[1]._target);
+    outset.add(vert._out[0]._target);
+    outset.add(vert._out[1]._target);
+
+    while (!pend.empty()) {
+      ACNVertex* cur = gr.vertex(pend.front());
+      pend.pop_front();
+
+      if (!cur->icbs() || in_pord[cur->_idx]) {
+        continue;
+      }
+      bool incoming_nodes_in_set = true;
+      for (auto [target, _] : cur->_in) {
+        incoming_nodes_in_set &= in_pord[target];
+      }
+      if (!incoming_nodes_in_set) {
+        continue;
+      }
+
+      pord.push_back(cur);
+      in_pord[cur->_idx] = true;
+      for (auto [target, _] : cur->_out) {
+        pend.push_back(target);
+      }
+      outset.remove(cur->_idx);
+    }
+
+    // Contraction phase
+    while (outset.size() != 2) {
+      ACNVertex* removed = pord.back();
+      pord.pop_back();
+      outset.remove(removed->_out[0]._target);
+      outset.remove(removed->_out[1]._target);
+      outset.add(removed->_idx);
+    }
+
+    if (pord.size() == 1) {
+      return nullptr;
+    }
+
+    using ReduceGraph = FlowGraph<std::variant<ACNVertex*, int>>;
+    using ReduceVertex = FlowVertex<std::variant<ACNVertex*, int>>;
+    ReduceGraph ccond_gr;
+    struct ReduceData {
+      ReduceVertex* _n0;
+      ReduceVertex* _n1;
+      EdgeData _n0_n1;
+      EdgeData _n0_n2;
+      EdgeData _n1_n2;
+      EdgeData _n1_n3;
+    };
+    for (ACNVertex* v : pord) {
+      ccond_gr.emplace_vertex(v);
+    }
+    for (int casen : outset) {
+      ccond_gr.emplace_vertex(gr.vertex(casen));
+    }
+    for (ACNVertex* v : pord) {
+      ccond_gr.emplace_link(v->_idx, v->_out[0]._target, v->_out[0]._tr);
+      ccond_gr.emplace_link(v->_idx, v->_out[1]._target, v->_out[1]._tr);
+    }
+
+    CCond cond_node;
+    while (ccond_gr.size() > 3) {
+      std::optional<ReduceData> rdata;
+      ccond_gr.foreach_real([&gr, &ccond_gr, &rdata](ReduceVertex& reduce_candidate) {
+        auto e0 = reduce_candidate._out[0];
+        auto e1 = reduce_candidate._out[1];
+        auto v0 = gr.vertex(e0._target);
+        auto v1 = gr.vertex(e1._target);
+        if (v0->icbs() && v0->_out[0]._target == e1._target) {
+          rdata = ReduceData{
+            ._n0_n1 = e0,
+            ._n0_n2 = e1,
+            ._n1_n2 = v0->_out[0],
+            ._n1_n3 = v0->_out[1],
+          };
+        } else if (v0->icbs() && v0->_out[1]._target == e1._target) {
+          rdata = ReduceData{
+            ._n0_n1 = e0,
+            ._n0_n2 = e1,
+            ._n1_n2 = v0->_out[1],
+            ._n1_n3 = v0->_out[0],
+          };
+        } else if (v1->icbs() && v1->_out[0]._target == e0._target) {
+          rdata = ReduceData{
+            ._n0_n1 = e1,
+            ._n0_n2 = e0,
+            ._n1_n2 = v1->_out[0],
+            ._n1_n3 = v1->_out[1],
+          };
+        } else if (v1->icbs() && v1->_out[1]._target == e0._target) {
+          rdata = ReduceData{
+            ._n0_n1 = e1,
+            ._n0_n2 = e0,
+            ._n1_n2 = v1->_out[1],
+            ._n1_n3 = v1->_out[0],
+          };
+        }
+
+        if (rdata) {
+          rdata->_n0 = &reduce_candidate;
+          rdata->_n1 = ccond_gr.vertex(rdata->_n0_n1._target);
+          return false;
+        }
+        return true;
+      });
+
+      // TODO: remove assertions in this codebase
+      assert(rdata);
+
+      constexpr auto get_rv_data = [](ReduceVertex* rv) -> std::variant<AbstractControlNode*, int> {
+        if (std::holds_alternative<ACNVertex*>(rv->data())) {
+          return std::get<ACNVertex*>(rv->data())->data();
+        } else {
+          return std::get<int>(rv->data());
+        }
+      };
+
+      int new_cond_tree_vtx = cond_node.put(get_rv_data(rdata->_n0),
+        get_rv_data(rdata->_n1),
+        // If the short-circuit path condition does not match the fallback condition, then its condition must be
+        // inverted
+        rdata->_n0_n2._tr != rdata->_n1_n2._tr,
+        // If the short-circuit path occurs when true, presume the condition to be an or, otherwise an and
+        rdata->_n0_n2._tr == BlockTransfer::kConditionTrue ? CCond::BoolOp::kOr : CCond::BoolOp::kAnd);
+      ccond_gr.substitute_pair(std::make_pair(rdata->_n0->_idx, rdata->_n1->_idx), new_cond_tree_vtx);
+    }
+
+    return build_substitutor<CCondSubstitutor>(new CCond(std::move(cond_node)), state, pord);
+  };
+
+  auto compound_cond = try_compound_conditional(state, vert);
+  if (compound_cond != nullptr) {
+    return compound_cond;
+  }
+
+  // TODO: Cascading conditionals (requires improved IR/Dataflow analysis)
+  // auto cascading_cond = try_cascading_conditional(state, vert);
+  // if (cascading_cond != nullptr) {
+  //  return std::unique_ptr<Substitutor>(cascading_cond.release());
+  //}
+
+  return nullptr;
+}
+
+std::unique_ptr<Substitutor> acyclic_region_type(SPSState& state, ACNVertex& vert) {
   ACNGraph& gr = state._gr;
   {
     std::vector<AbstractControlNode*> seqlist;
-    SeqSubstitution sub;
+    std::vector<ACNVertex*> seqsub;
     if (vert.single_pred()) {
       for (ACNVertex* cur = gr.vertex(vert._in[0]._target); cur->sess(); cur = gr.vertex(cur->_in[0]._target)) {
-        sub._list.push_back(cur);
+        seqsub.push_back(cur);
         seqlist.push_back(cur->data());
       }
     }
 
-    std::reverse(sub._list.begin(), sub._list.end());
+    std::reverse(seqsub.begin(), seqsub.end());
     std::reverse(seqlist.begin(), seqlist.end());
-    sub._list.push_back(&vert);
+    seqsub.push_back(&vert);
     seqlist.push_back(vert.data());
 
     if (vert.single_succ()) {
       for (ACNVertex* cur = gr.vertex(vert._out[0]._target); cur->sess(); cur = gr.vertex(cur->_out[0]._target)) {
-        sub._list.push_back(cur);
+        seqsub.push_back(cur);
         seqlist.push_back(cur->data());
       }
     }
 
     if (seqlist.size() > 1) {
-      return std::make_pair<AbstractControlNode*, AcyclicSubstitution>(new Seq(std::move(seqlist)), sub);
+      return build_substitutor<SeqSubstitutor>(new Seq(std::move(seqlist)), state, std::move(seqsub));
     }
   }
 
@@ -237,128 +302,111 @@ AcyclicResult acyclic_region_type(SPSState& state, ACNVertex& vert) {
     ACNVertex* n = gr.vertex(vert._out[1]._target);
     if (m->sess() && n->sess() && gr.vertex(m->_out[0]._target) == gr.vertex(n->_out[0]._target)) {
       if (vert._out[0]._tr == BlockTransfer::kConditionTrue) {
-        return std::make_pair<AbstractControlNode*, AcyclicSubstitution>(new IfElse(vert.data(), m->data(), n->data()),
-          IfElseSubstitution{
-            ._hdr = &vert,
-            ._true = m,
-            ._false = n,
-            ._next = gr.vertex(m->_out[0]._target),
-          });
+        return build_substitutor<IfElseSubstitutor>(
+          new IfElse(vert.data(), m->data(), n->data()), state, &vert, m, n, gr.vertex(m->_out[0]._target));
       } else {
-        return std::make_pair<AbstractControlNode*, AcyclicSubstitution>(new IfElse(vert.data(), n->data(), m->data()),
-          IfElseSubstitution{
-            ._hdr = &vert,
-            ._true = n,
-            ._false = m,
-            ._next = gr.vertex(m->_out[0]._target),
-          });
+        return build_substitutor<IfElseSubstitutor>(
+          new IfElse(vert.data(), n->data(), m->data()), state, &vert, n, m, gr.vertex(m->_out[0]._target));
       }
     }
     if (m->sess() && gr.vertex(m->_out[0]._target) == n) {
       if (vert._out[0]._tr == BlockTransfer::kConditionTrue) {
-        return std::make_pair<AbstractControlNode*, AcyclicSubstitution>(new If(vert.data(), m->data(), false),
-          IfSubstitution{
-            ._hdr = &vert,
-            ._true = m,
-            ._next = n,
-          });
+        return build_substitutor<IfSubstitutor>(new If(vert.data(), m->data(), false), state, &vert, m, n);
       } else {
-        return std::make_pair<AbstractControlNode*, AcyclicSubstitution>(new If(vert.data(), m->data(), true),
-          IfSubstitution{
-            ._hdr = &vert,
-            ._true = m,
-            ._next = n,
-          });
+        return build_substitutor<IfSubstitutor>(new If(vert.data(), m->data(), true), state, &vert, m, n);
       }
     }
     if (n->sess() && gr.vertex(n->_out[0]._target) == m) {
       if (vert._out[1]._tr == BlockTransfer::kConditionTrue) {
-        return std::make_pair<AbstractControlNode*, AcyclicSubstitution>(new If(vert.data(), n->data(), false),
-          IfSubstitution{
-            ._hdr = &vert,
-            ._true = n,
-            ._next = m,
-          });
+        return build_substitutor<IfSubstitutor>(new If(vert.data(), n->data(), false), state, &vert, n, m);
       } else {
-        return std::make_pair<AbstractControlNode*, AcyclicSubstitution>(new If(vert.data(), n->data(), true),
-          IfSubstitution{
-            ._hdr = &vert,
-            ._true = n,
-            ._next = m,
-          });
+        return build_substitutor<IfSubstitutor>(new If(vert.data(), n->data(), true), state, &vert, n, m);
       }
     }
 
-    // Either generic refinement or a compound boolean
-    return compound_boolean(state, vert);
+    // This is for more complex conditional regions (compound conditionals, sparse switches)
+    return complex_conditional_type(state, vert);
   }
-
-  // TODO: Check if merging node has multiple inputs, and if so it's probably an if/elseif
 
   // >= 2 outedges, non-inverse conditions
   if (vert._out.size() >= 2) {
-    ACNVertex* s0 = gr.vertex(vert._out[0]._target);
-    if (!s0->sess()) {
-      // Switch candidate
-      return RefinementSuggestion::kRefineSwitch;
-    }
-    ACNVertex* follow_node = gr.vertex(s0->_out[0]._target);
-
-    std::vector<std::pair<BlockTransfer, AbstractControlNode*>> cases;
-    cases.emplace_back(vert._out[0]._tr, s0->data());
-    for (size_t i = 1; i < vert._out.size(); i++) {
-      ACNVertex* sn = gr.vertex(vert._out[i]._target);
-      if (!sn->single_succ() || !sn->single_pred()) {
-        // Switch candidate
-        return RefinementSuggestion::kRefineSwitch;
-      }
-      ACNVertex* sn_succ = gr.vertex(sn->_out[0]._target);
-      if (sn_succ != follow_node) {
-        // Switch candidate
-        return RefinementSuggestion::kRefineSwitch;
-      }
-      cases.emplace_back(vert._out[i]._tr, sn->data());
-    }
-
-    // return new Switch(vert.data(), std::move(cases));
+    // TODO: switch statements
   }
 
-  // General refinement
-  return RefinementSuggestion::kRefineGeneric;
+  return nullptr;
 }
 
-Either<RefinementSuggestion, AbstractControlNode*> cyclic_region_type(
-  SPSState& state, ACNVertex& vert, std::vector<int> const& loop_members) {
-  for (auto [in_idx, _] : vert._in) {
-    if (in_idx == vert._idx) {
-      return new SelfLoop(vert.data());
-    }
+//Either<RefinementSuggestion, AbstractControlNode*> cyclic_region_type(
+//  SPSState& state, ACNVertex& vert, std::vector<int> const& loop_members) {
+//  for (auto [in_idx, _] : vert._in) {
+//    if (in_idx == vert._idx) {
+//      return new SelfLoop(vert.data());
+//    }
+//  }
+//
+//  // Do-while = self loop!
+//  if (vert._out.size() == 1) {
+//    // Hypothesis: do-while
+//
+//  } else if (vert._out.size() == 2) {
+//    // Hypothesis: while
+//    ACNVertex* follow;
+//    if (std::find(loop_members.begin(), loop_members.end(), vert._out[0]._target) != loop_members.end()) {
+//      follow = state._gr.vertex(vert._out[0]._target);
+//    } else {
+//      assert(std::find(loop_members.begin(), loop_members.end(), vert._out[1]._target) != loop_members.end());
+//      follow = state._gr.vertex(vert._out[1]._target);
+//    }
+//
+//    if (follow->_out.size()) {
+//    }
+//  }
+//}
+
+int replace_seq_in_graph(SPSState& state, SeqSubstitution const& ssub, Seq* seq, int post_ctr) {
+  ACNVertex* hdr_node = ssub._list.front();
+  ACNVertex* tail_node = ssub._list.back();
+
+  // Link nodes entering this structure to the new node
+  for (auto inedge : hdr_node->_in) {
+    state._gr.emplace_link(inedge._target, repl_node_id, inedge._tr);
+  }
+  for (auto outedge : tail_node->_out) {
+    state._gr.emplace_link(repl_node_id, outedge._target, outedge._tr);
   }
 
-  // Do-while = self loop!
-  if (vert._out.size() == 1) {
-    // Hypothesis: do-while
-
-  } else if (vert._out.size() == 2) {
-    // Hypothesis: while
-    ACNVertex* follow;
-    if (std::find(loop_members.begin(), loop_members.end(), vert._out[0]._target) != loop_members.end()) {
-      follow = state._gr.vertex(vert._out[0]._target);
-    } else {
-      assert(std::find(loop_members.begin(), loop_members.end(), vert._out[1]._target) != loop_members.end());
-      follow = state._gr.vertex(vert._out[1]._target);
-    }
-
-    if (follow->_out.size()) {
-    }
+  // Detach and mark parent structure
+  for (auto node : ssub._list) {
+    state._gr.detach(node);
+    state._structof[node->data()] = repl;
   }
+
+  // Update the dominator tree
+  // Since this is a sequential list of nodes, the only dominators needing updating are nodes dominated by the tail
+  std::replace(state._dom.begin(), state._dom.end(), tail_node->_idx, repl_node_id);
+  // And the dominator of this structure is the dominator of the header node
+  state._dom[repl_node_id] = state._dom[hdr_node->_idx];
+  // Clear out old dominator info
+  for (auto seqnode : seq->_seq) {
+    state._dom[state._data2vert[seqnode]->_idx] = -1;
+  }
+  // TODO: finish the fixup and test
+
+  // Update the postorder index to point to this new node
+  int seq_end = post_ctr;
+  if (state._post[post_ctr] != hdr_node->_idx) {
+    // Header node can't possibly appear before the current postorder counter
+    seq_end = *std::find(state._post.begin() + post_ctr, state._post.end(), hdr_node->_idx);
+  }
+  state._post[seq_end] = repl_node_id;
+  // Since this is a sequential list of nodes, they must all appear sequentially in the postorder iteration
+  const int seq_begin = seq_end - seq->_seq.size() + 1;
+  state._post.erase(state._post.begin() + seq_begin, state._post.begin() + seq_end);
+
+  return seq_begin;
 }
 
-int replace_in_graph(SPSState& state,
-  AcyclicSubstitution const& asub,
-  AbstractControlNode* repl,
-  AcyclicSubstitution const& sub,
-  int post_ctr) {
+int replace_in_graph(SPSState& state, AcyclicSubstitution const& asub, AbstractControlNode* repl, int post_ctr) {
   const int repl_node_id = state._gr.emplace_vertex(repl);
   state._dom.push_back(-1);
   // Sanity check that everywhere we update the graph, the dom tree is updated to match
@@ -366,48 +414,7 @@ int replace_in_graph(SPSState& state,
 
   switch (repl->_type) {
     case ACNType::Seq: {
-      Seq* seq = static_cast<Seq*>(repl);
-      SeqSubstitution const& ssub = std::get<SeqSubstitution>(asub);
-      ACNVertex* hdr_node = ssub._list.front();
-      ACNVertex* tail_node = ssub._list.back();
-
-      // Link nodes entering this structure to the new node
-      for (auto inedge : hdr_node->_in) {
-        state._gr.emplace_link(inedge._target, repl_node_id, inedge._tr);
-      }
-      for (auto outedge : tail_node->_out) {
-        state._gr.emplace_link(repl_node_id, outedge._target, outedge._tr);
-      }
-
-      // Detach and mark parent structure
-      for (auto node : ssub._list) {
-        state._gr.detach(node);
-        state._structof[node->data()] = repl;
-      }
-
-      // Update the dominator tree
-      // Since this is a sequential list of nodes, the only dominators needing updating are nodes dominated by the tail
-      std::replace(state._dom.begin(), state._dom.end(), tail_node->_idx, repl_node_id);
-      // And the dominator of this structure is the dominator of the header node
-      state._dom[repl_node_id] = state._dom[hdr_node->_idx];
-      // Clear out old dominator info
-      for (auto seqnode : seq->_seq) {
-        state._dom[state._data2vert[seqnode]->_idx] = -1;
-      }
-      // TODO: finish the fixup and test
-
-      // Update the postorder index to point to this new node
-      int seq_end = post_ctr;
-      if (state._post[post_ctr] != hdr_node->_idx) {
-        // Header node can't possibly appear before the current postorder counter
-        seq_end = *std::find(state._post.begin() + post_ctr, state._post.end(), hdr_node->_idx);
-      }
-      state._post[seq_end] = repl_node_id;
-      // Since this is a sequential list of nodes, they must all appear sequentially in the postorder iteration
-      const int seq_begin = seq_end - seq->_seq.size() + 1;
-      state._post.erase(state._post.begin() + seq_begin, state._post.begin() + seq_end);
-
-      return seq_begin;
+      replace_seq_in_graph(state, std::get<SeqSubstitution>(asub), reinterpret_cast<Seq*>(repl), post_ctr);
     }
 
     case ACNType::If: {
@@ -614,7 +621,6 @@ std::vector<int> loop_membership(SPSState& state, ACNVertex* head) {
   reach_under.push_back(head->_idx);
   return reach_under;
 }
-}  // namespace
 
 HLLControlTree SemanticPreservingStructurizer::structurize() {
   SPSState state;
@@ -629,9 +635,10 @@ HLLControlTree SemanticPreservingStructurizer::structurize() {
 
     for (int post_ctr = 0; post_ctr < static_cast<int>(state._post.size()) && state._gr.size() > 1;) {
       ACNVertex* vert = state._gr.vertex(state._post[post_ctr]);
-      AcyclicResult acyclic_result = acyclic_region_type(state, *vert);
+      auto acyclic_result = acyclic_region_type(state, *vert);
 
-      if (acyclic_result) {
+      if (acyclic_result != nullptr) {
+        acyclic_result->substitute();
         post_ctr = replace_in_graph(state, acyclic_result.right().first, acyclic_result.right().second, post_ctr);
         continue;
       }

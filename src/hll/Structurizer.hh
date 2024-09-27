@@ -4,6 +4,8 @@
 
 namespace decomp::hll {
 struct AbstractControlNode;
+using ACNVertex = FlowVertex<AbstractControlNode*>;
+using ACNGraph = FlowGraph<AbstractControlNode*>;
 
 struct HLLControlTree {
   AbstractControlNode* _root;
