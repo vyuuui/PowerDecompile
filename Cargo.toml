@@ -1,0 +1,6 @@
+[package]
+name = "ppc-decomp"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
