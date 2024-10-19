@@ -31,43 +31,6 @@ impl VertexEdge {
     }
 }
 
-pub enum EdgeIterator<'a> {
-    NoEdge,
-    SingleEdge(IndexType, bool),
-    DoubleEdge(IndexType, IndexType, usize),
-    VariableEdgeCount(std::slice::Iter<'a, (u64, IndexType)>),
-}
-
-impl<'a> Iterator for EdgeIterator<'a> {
-    type Item = IndexType;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            EdgeIterator::NoEdge => None,
-            EdgeIterator::SingleEdge(e0, vis) => {
-                if !*vis {
-                    *vis = true;
-                    Some(*e0)
-                } else {
-                    None
-                }
-            }
-            EdgeIterator::DoubleEdge(e0, e1, cnt) => match *cnt {
-                0 => {
-                    *cnt += 1;
-                    Some(*e0)
-                }
-                1 => {
-                    *cnt += 1;
-                    Some(*e1)
-                }
-                _ => None,
-            },
-            EdgeIterator::VariableEdgeCount(v) => v.next().map(|p| p.1),
-        }
-    }
-}
-
 impl<'a> IntoIterator for &'a VertexEdge {
     type Item = IndexType;
     type IntoIter = std::iter::Copied<std::slice::Iter<'a, IndexType>>;
@@ -87,10 +50,7 @@ pub struct Vertex<T> {
 }
 
 impl<T> Vertex<T> {
-    pub fn edge_iter<'a>(
-        &'a self,
-        fwd: bool,
-    ) -> std::iter::Copied<std::slice::Iter<'a, IndexType>> {
+    pub fn edge_iter(&self, fwd: bool) -> std::iter::Copied<std::slice::Iter<IndexType>> {
         if fwd {
             self.out_edges.into_iter()
         } else {
@@ -192,11 +152,11 @@ impl<T> Graph<T> {
 
     pub fn link(&mut self, from: IndexType, to: IndexType) {
         // TODO: This silently fails, gun pointed at foot
-        self.vert_mut(from).map(|v| v.link_out(to));
-        self.vert_mut(to).map(|v| v.link_in(from));
+        if let Some(v) = self.vert_mut(to) { v.link_out(from); }
+        if let Some(v) = self.vert_mut(from) { v.link_out(to); }
     }
 
-    pub fn vert_iter<'a>(&'a self) -> std::slice::Iter<'a, Vertex<T>> {
+    pub fn vert_iter(&self) -> std::slice::Iter<Vertex<T>> {
         self.vertices.iter()
     }
 
