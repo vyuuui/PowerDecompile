@@ -3,8 +3,120 @@ use crate::util::disjointset::DisjointSet;
 pub type IndexType = usize;
 const INVALID_INDEX: IndexType = usize::MAX;
 
-pub trait Node {
-    fn edge_iter(&self, fwd: bool) -> impl Iterator<Item = IndexType>;
+// Optimized for the most common edge patterns
+pub enum VertexEdge {
+    CommonEdge([IndexType; 2], usize),
+    MultiwayEdge(Vec<IndexType>),
+}
+
+impl Default for VertexEdge {
+    fn default() -> Self {
+        VertexEdge::CommonEdge([INVALID_INDEX; 2], 0)
+    }
+}
+
+impl VertexEdge {
+    pub fn add_link(&mut self, target: IndexType) {
+        match self {
+            VertexEdge::CommonEdge(targets, count) => {
+                if *count < 2 {
+                    targets[*count] = target;
+                    *count += 1;
+                } else {
+                    *self = VertexEdge::MultiwayEdge(vec![targets[0], targets[1], target]);
+                }
+            }
+            VertexEdge::MultiwayEdge(targets) => targets.push(target),
+        }
+    }
+}
+
+pub enum EdgeIterator<'a> {
+    NoEdge,
+    SingleEdge(IndexType, bool),
+    DoubleEdge(IndexType, IndexType, usize),
+    VariableEdgeCount(std::slice::Iter<'a, (u64, IndexType)>),
+}
+
+impl<'a> Iterator for EdgeIterator<'a> {
+    type Item = IndexType;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            EdgeIterator::NoEdge => None,
+            EdgeIterator::SingleEdge(e0, vis) => {
+                if !*vis {
+                    *vis = true;
+                    Some(*e0)
+                } else {
+                    None
+                }
+            }
+            EdgeIterator::DoubleEdge(e0, e1, cnt) => match *cnt {
+                0 => {
+                    *cnt += 1;
+                    Some(*e0)
+                }
+                1 => {
+                    *cnt += 1;
+                    Some(*e1)
+                }
+                _ => None,
+            },
+            EdgeIterator::VariableEdgeCount(v) => v.next().map(|p| p.1),
+        }
+    }
+}
+
+impl<'a> IntoIterator for &'a VertexEdge {
+    type Item = IndexType;
+    type IntoIter = std::iter::Copied<std::slice::Iter<'a, IndexType>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            VertexEdge::CommonEdge(targets, _) => targets.iter().copied(),
+            VertexEdge::MultiwayEdge(targets) => targets.iter().copied(),
+        }
+    }
+}
+
+pub struct Vertex<T> {
+    out_edges: VertexEdge,
+    in_edges: VertexEdge,
+    data: Option<T>,
+}
+
+impl<T> Vertex<T> {
+    pub fn edge_iter<'a>(
+        &'a self,
+        fwd: bool,
+    ) -> std::iter::Copied<std::slice::Iter<'a, IndexType>> {
+        if fwd {
+            self.out_edges.into_iter()
+        } else {
+            self.in_edges.into_iter()
+        }
+    }
+
+    pub fn link_out(&mut self, target: IndexType) {
+        self.out_edges.add_link(target);
+    }
+
+    pub fn link_in(&mut self, target: IndexType) {
+        self.in_edges.add_link(target);
+    }
+
+    pub fn data(&self) -> Option<&T> {
+        self.data.as_ref()
+    }
+
+    pub fn data_mut(&mut self) -> Option<&mut T> {
+        self.data.as_mut()
+    }
+
+    pub fn is_pseudo(&self) -> bool {
+        self.data.is_none()
+    }
 }
 
 pub struct PreorderIterator {
@@ -21,25 +133,78 @@ pub struct PostorderIterator {
     depth: usize,
 }
 
-pub trait Graph<'a, T>
-where
-    T: Node + 'a,
-{
-    type VertexType;
+pub struct Graph<T> {
+    vertices: Vec<Vertex<T>>,
+    root: IndexType,
+    term: IndexType,
+}
 
-    fn root(&self) -> IndexType;
-    fn term(&self) -> IndexType;
+impl<T> Default for Graph<T> {
+    fn default() -> Self {
+        Graph {
+            vertices: vec![
+                Vertex {
+                    out_edges: VertexEdge::default(),
+                    in_edges: VertexEdge::default(),
+                    data: None,
+                },
+                Vertex {
+                    out_edges: VertexEdge::default(),
+                    in_edges: VertexEdge::default(),
+                    data: None,
+                },
+            ],
+            root: 0,
+            term: 1,
+        }
+    }
+}
 
-    fn vert(&self, id: IndexType) -> Option<&'a T>;
-    fn vert_mut(&mut self, id: IndexType) -> Option<&'a mut T>;
+impl<T> Graph<T> {
+    pub fn root(&self) -> IndexType {
+        self.root
+    }
 
-    fn size(&self) -> usize;
+    pub fn term(&self) -> IndexType {
+        self.term
+    }
 
-    fn preorder_iter(&self, fwd: bool) -> PreorderIterator {
+    pub fn vert(&self, id: IndexType) -> Option<&Vertex<T>> {
+        self.vertices.get(id)
+    }
+    pub fn vert_mut(&mut self, id: IndexType) -> Option<&mut Vertex<T>> {
+        self.vertices.get_mut(id)
+    }
+
+    pub fn size(&self) -> usize {
+        self.vertices.len()
+    }
+
+    // TODO: Add some version of this accepting preset edge list to fix inefficient graph shallow copy
+    pub fn add_vert(&mut self, val: T) -> IndexType {
+        self.vertices.push(Vertex {
+            in_edges: VertexEdge::default(),
+            out_edges: VertexEdge::default(),
+            data: Some(val),
+        });
+        self.vertices.len() - 1
+    }
+
+    pub fn link(&mut self, from: IndexType, to: IndexType) {
+        // TODO: This silently fails, gun pointed at foot
+        self.vert_mut(from).map(|v| v.link_out(to));
+        self.vert_mut(to).map(|v| v.link_in(from));
+    }
+
+    pub fn vert_iter<'a>(&'a self) -> std::slice::Iter<'a, Vertex<T>> {
+        self.vertices.iter()
+    }
+
+    pub fn preorder_iter(&self, fwd: bool) -> PreorderIterator {
         PreorderIterator::new(self.root(), self.size(), fwd)
     }
 
-    fn postorder_iter(&self, fwd: bool) -> PostorderIterator {
+    pub fn postorder_iter(&self, fwd: bool) -> PostorderIterator {
         PostorderIterator::new(self.root(), self.size(), fwd)
     }
 
@@ -65,13 +230,14 @@ where
         min_u
     }
 
-    fn compute_dom_tree(&self, fwd: bool) -> Vec<IndexType> {
+    pub fn compute_dom_tree(&self, fwd: bool) -> Vec<IndexType> {
+        // TODO: May be possible to remove a lot of bounds checking in here
         let mut idom: Vec<IndexType> = vec![0; self.size()];
 
         // Notation and symbols:
         //   G = Control flow graph
         //   T = DFS tree
-        //   *_gr -> Graph node number
+        //   *_gr -> Graph vertex number
         //   *_dfs -> DFS tree number
 
         // Step 1: compute dfs number and tree for all v ∈ G
@@ -164,11 +330,7 @@ impl PreorderIterator {
         }
     }
 
-    pub fn next<'a, T, U>(&mut self, graph: &T) -> Option<(IndexType, IndexType)>
-    where
-        T: Graph<'a, U> + ?Sized,
-        U: Node + 'a,
-    {
+    pub fn next<T>(&mut self, graph: &Graph<T>) -> Option<(IndexType, IndexType)> {
         let (cv, pv) = loop {
             let (cv, pv) = self.stack.pop()?;
             if self.vis[cv] {
@@ -197,11 +359,7 @@ impl PostorderIterator {
         }
     }
 
-    pub fn next<'a, T, U>(&mut self, graph: T) -> Option<IndexType>
-    where
-        T: Graph<'a, U>,
-        U: Node + 'a,
-    {
+    pub fn next<T>(&mut self, graph: &Graph<T>) -> Option<IndexType> {
         // To handle pruning a path switch
         if self.path.len() > self.depth {
             return self.path.pop();

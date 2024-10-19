@@ -1,4 +1,5 @@
-use crate::ir::pdir::{IndexType, PDRoutine, PDExpression};
+use crate::ir::pdir::{BasicBlock, PDRoutine, PDExpression};
+use crate::util::graph::{IndexType, Graph};
 
 pub trait Structurizer {
     // TODO: Result type?
@@ -43,10 +44,30 @@ pub enum ControlNode {
 }
 
 struct SPSState {
+    rgraph: Graph<ControlNode>,
+}
 
+// TODO: This is unnecessarily slow
+fn init_analysis_graph(graph: &Graph<BasicBlock>) -> Graph<ControlNode> {
+    let mut copy_graph = Graph::default();
+    for (idx, v) in graph.vert_iter().enumerate() {
+        if v.is_pseudo() {
+            continue;
+        }
+        // TODO: Get source index from node instead here
+        copy_graph.add_vert(ControlNode::Leaf(idx));
+    }
+    for (from, v) in graph.vert_iter().enumerate() {
+        for to in v.edge_iter(true) {
+            copy_graph.link(from, to);
+        }
+    }
+
+    copy_graph
 }
 
 pub fn semantic_preserving_structurize(flowgraph: &PDRoutine) -> Result<ControlNode, String> {
+    let mut state = SPSState { rgraph: init_analysis_graph(&flowgraph.blocks) };
 
 
     Err(String::from("Unimplemented"))
