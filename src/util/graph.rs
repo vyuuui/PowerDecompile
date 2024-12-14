@@ -1,32 +1,80 @@
 use crate::util::disjointset::DisjointSet;
+use arrayvec::ArrayVec;
 
 pub type IndexType = usize;
 const INVALID_INDEX: IndexType = usize::MAX;
 
 // Optimized for the most common edge patterns
 pub enum VertexEdge {
-    CommonEdge([IndexType; 2], usize),
+    CommonEdge(ArrayVec<IndexType, 2>),
     MultiwayEdge(Vec<IndexType>),
 }
 
 impl Default for VertexEdge {
     fn default() -> Self {
-        VertexEdge::CommonEdge([INVALID_INDEX; 2], 0)
+        VertexEdge::CommonEdge(ArrayVec::new())
     }
 }
 
 impl VertexEdge {
     pub fn add_link(&mut self, target: IndexType) {
         match self {
-            VertexEdge::CommonEdge(targets, count) => {
-                if *count < 2 {
-                    targets[*count] = target;
-                    *count += 1;
-                } else {
-                    *self = VertexEdge::MultiwayEdge(vec![targets[0], targets[1], target]);
+            VertexEdge::CommonEdge(targets) => {
+                if targets.try_push(target).is_err() {
+                    let mut v = targets.to_vec();
+                    v.push(target);
+                    *self = VertexEdge::MultiwayEdge(v);
                 }
             }
             VertexEdge::MultiwayEdge(targets) => targets.push(target),
+        }
+    }
+
+    pub fn remove_link(&mut self, target: IndexType) {
+        match self {
+            VertexEdge::CommonEdge(targets) => {
+                targets.retain(|x| *x != target);
+            }
+            VertexEdge::MultiwayEdge(targets) => {
+                targets.retain(|i| *i != target);
+            }
+        }
+    }
+
+    pub fn relink(&mut self, old: &[IndexType], new: IndexType) {
+        match self {
+            VertexEdge::CommonEdge(targets) => {
+                let mut removed = false;
+                targets.retain(|x| {
+                    if old.contains(x) {
+                        if !removed {
+                            *x = new;
+                            removed = true;
+                            true
+                        } else {
+                            false
+                        }
+                    } else {
+                        true
+                    }
+                });
+            }
+            VertexEdge::MultiwayEdge(targets) => {
+                let mut removed = false;
+                targets.retain_mut(|x| {
+                    if old.contains(x) {
+                        if !removed {
+                            *x = new;
+                            removed = true;
+                            true
+                        } else {
+                            false
+                        }
+                    } else {
+                        true
+                    }
+                });
+            }
         }
     }
 }
@@ -37,19 +85,31 @@ impl<'a> IntoIterator for &'a VertexEdge {
 
     fn into_iter(self) -> Self::IntoIter {
         match self {
-            VertexEdge::CommonEdge(targets, _) => targets.iter().copied(),
+            VertexEdge::CommonEdge(targets) => targets.iter().copied(),
             VertexEdge::MultiwayEdge(targets) => targets.iter().copied(),
         }
     }
 }
 
 pub struct Vertex<T> {
+    idx: IndexType,
+    detached: bool,
     out_edges: VertexEdge,
     in_edges: VertexEdge,
     data: Option<T>,
 }
 
 impl<T> Vertex<T> {
+    pub fn detached_node(idx: IndexType) -> Vertex<T> {
+        Vertex {
+            idx,
+            detached: true,
+            out_edges: VertexEdge::default(),
+            in_edges: VertexEdge::default(),
+            data: Option::None,
+        }
+    }
+
     pub fn edge_iter(&self, fwd: bool) -> std::iter::Copied<std::slice::Iter<IndexType>> {
         if fwd {
             self.out_edges.into_iter()
@@ -66,6 +126,31 @@ impl<T> Vertex<T> {
         self.in_edges.add_link(target);
     }
 
+    pub fn unlink_out(&mut self, target: IndexType) {
+        self.out_edges.remove_link(target);
+    }
+
+    pub fn unlink_in(&mut self, target: IndexType) {
+        self.in_edges.remove_link(target);
+    }
+
+    // re(place)link
+    pub fn relink_out(&mut self, old: IndexType, new: IndexType) {
+        self.out_edges.relink(&[old], new);
+    }
+
+    pub fn relink_in(&mut self, old: IndexType, new: IndexType) {
+        self.in_edges.relink(&[old], new);
+    }
+
+    pub fn relink_out_multiple(&mut self, old: &[IndexType], new: IndexType) {
+        self.out_edges.relink(old, new);
+    }
+
+    pub fn relink_in_multiple(&mut self, old: &[IndexType], new: IndexType) {
+        self.in_edges.relink(old, new);
+    }
+
     pub fn data(&self) -> Option<&T> {
         self.data.as_ref()
     }
@@ -76,6 +161,10 @@ impl<T> Vertex<T> {
 
     pub fn is_pseudo(&self) -> bool {
         self.data.is_none()
+    }
+
+    pub fn index(&self) -> IndexType {
+        self.idx
     }
 }
 
@@ -104,11 +193,15 @@ impl<T> Default for Graph<T> {
         Graph {
             vertices: vec![
                 Vertex {
+                    idx: 0,
+                    detached: false,
                     out_edges: VertexEdge::default(),
                     in_edges: VertexEdge::default(),
                     data: None,
                 },
                 Vertex {
+                    idx: 1,
+                    detached: false,
                     out_edges: VertexEdge::default(),
                     in_edges: VertexEdge::default(),
                     data: None,
@@ -140,9 +233,23 @@ impl<T> Graph<T> {
         self.vertices.len()
     }
 
+    pub fn detach(&mut self, id: IndexType) {
+        let outedges = std::mem::take(&mut self.vertices[id].out_edges);
+        let inedges = std::mem::take(&mut self.vertices[id].in_edges);
+        for o in &outedges {
+            self.vertices[o].unlink_in(id);
+        }
+        for i in &inedges {
+            self.vertices[i].unlink_out(id);
+        }
+        self.vertices[id].detached = true;
+    }
+
     // TODO: Add some version of this accepting preset edge list to fix inefficient graph shallow copy
     pub fn add_vert(&mut self, val: T) -> IndexType {
         self.vertices.push(Vertex {
+            idx: self.vertices.len(),
+            detached: false,
             in_edges: VertexEdge::default(),
             out_edges: VertexEdge::default(),
             data: Some(val),
@@ -151,13 +258,70 @@ impl<T> Graph<T> {
     }
 
     pub fn link(&mut self, from: IndexType, to: IndexType) {
-        // TODO: This silently fails, gun pointed at foot
-        if let Some(v) = self.vert_mut(to) { v.link_out(from); }
-        if let Some(v) = self.vert_mut(from) { v.link_out(to); }
+        self.vertices[to].link_out(from);
+        self.vertices[from].link_in(to);
     }
 
-    pub fn vert_iter(&self) -> std::slice::Iter<Vertex<T>> {
-        self.vertices.iter()
+    pub fn cut(&mut self, a: IndexType, b: IndexType) {
+        self.vertices[a].unlink_in(b);
+        self.vertices[a].unlink_out(b);
+        self.vertices[b].unlink_in(a);
+        self.vertices[b].unlink_out(a);
+    }
+
+    // Re(place) all links incoming to a node with a new node
+    // Old node maintains incoming connections
+    pub fn relink_in(&mut self, old: IndexType, new: IndexType) {
+        let inset: Vec<IndexType> = self.vertices[old].edge_iter(false).collect();
+        for i in inset {
+            self.vertices[i].relink_out(old, new);
+            self.vertices[new].link_in(i);
+        }
+    }
+    // Re(place) all links outgoing from a node with a new node
+    // Old node maintains outgoing connections
+    pub fn relink_out(&mut self, old: IndexType, new: IndexType) {
+        let outset: Vec<IndexType> = self.vertices[old].edge_iter(true).collect();
+        for i in outset {
+            self.vertices[i].relink_in(old, new);
+            self.vertices[new].link_out(i);
+        }
+    }
+    // Re(place) all links outgoing from a set of nodes with a new node
+    // Old nodes maintains outgoing connections
+    pub fn relink_out_multiple(&mut self, old: &[IndexType], new: IndexType) {
+        let mut outset: Vec<IndexType> = vec![];
+        for i in old {
+            for ii in self.vertices[*i].edge_iter(true) {
+                outset.push(ii);
+            }
+        }
+        outset.sort();
+        outset.dedup();
+        for i in outset {
+            self.vertices[i].relink_in_multiple(old, new);
+            self.vertices[new].link_out(i);
+        }
+    }
+    // Re(place) all links incoming to a set of nodes with a new node
+    // Old nodes maintains incoming connections
+    pub fn relink_in_multiple(&mut self, old: &[IndexType], new: IndexType) {
+        let mut inset: Vec<IndexType> = vec![];
+        for i in old {
+            for ii in self.vertices[*i].edge_iter(false) {
+                inset.push(ii);
+            }
+        }
+        inset.sort();
+        inset.dedup();
+        for i in inset {
+            self.vertices[i].relink_out_multiple(old, new);
+            self.vertices[new].link_in(i);
+        }
+    }
+
+    pub fn vert_iter(&self) -> impl Iterator<Item = &Vertex<T>> {
+        self.vertices.iter().skip_while(|&i| i.detached)
     }
 
     pub fn preorder_iter(&self, fwd: bool) -> PreorderIterator {
