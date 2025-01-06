@@ -1,11 +1,13 @@
 use crate::util::disjointset::DisjointSet;
 use arrayvec::ArrayVec;
+use std::collections::BTreeSet;
 
 pub type IndexType = usize;
-const INVALID_INDEX: IndexType = usize::MAX;
+pub const INVALID_INDEX: IndexType = usize::MAX;
 
 // Optimized for the most common edge patterns
 pub enum VertexEdge {
+    // TODO: perhaps add 2 other types of edges here to clarify T/F?
     CommonEdge(ArrayVec<IndexType, 2>),
     MultiwayEdge(Vec<IndexType>),
 }
@@ -115,6 +117,76 @@ impl<T> Vertex<T> {
             self.out_edges.into_iter()
         } else {
             self.in_edges.into_iter()
+        }
+    }
+
+    pub fn single_succ(&self) -> Option<IndexType> {
+        if let VertexEdge::CommonEdge(e) = &self.out_edges {
+            if e.len() == 1 {
+                Some(e[0])
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn single_pred(&self) -> Option<IndexType> {
+        if let VertexEdge::CommonEdge(e) = &self.in_edges {
+            if e.len() == 1 {
+                Some(e[0])
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    // Single predecessor single successor
+    pub fn is_spss(&self) -> bool {
+        match (&self.in_edges, &self.out_edges) {
+            (VertexEdge::CommonEdge(e0), VertexEdge::CommonEdge(e1)) => {
+                e0.len() == 1 && e1.len() == 1
+            }
+            _ => false,
+        }
+    }
+
+    // Inverse conditional binary split
+    pub fn icbs(&self) -> Option<(IndexType, IndexType)> {
+        match &self.out_edges {
+            VertexEdge::CommonEdge(e) if e.len() == 2 => Some((e[0], e[1])),
+            _ => None,
+        }
+    }
+
+    pub fn incoming_match(&self, against: &[IndexType]) -> bool {
+        match &self.in_edges {
+            VertexEdge::CommonEdge(e) => {
+                if e.len() != against.len() {
+                    false
+                } else if e.len() == 1 {
+                    e[0] == against[0]
+                } else if e.len() == 2 {
+                    (e[0] == against[0] && e[1] == against[1]) ||
+                        (e[0] == against[1] && e[1] == against[0])
+                } else {
+                    true
+                }
+            }
+            VertexEdge::MultiwayEdge(e) => {
+                if e.len() != against.len() {
+                    false
+                } else {
+                    let mut v0 = e.to_vec();
+                    let mut v1 = against.to_vec();
+                    v0.sort();
+                    v1.sort();
+                    v0 == v1
+                }
+            }
         }
     }
 
@@ -274,6 +346,10 @@ impl<T> Graph<T> {
     pub fn relink_in(&mut self, old: IndexType, new: IndexType) {
         let inset: Vec<IndexType> = self.vertices[old].edge_iter(false).collect();
         for i in inset {
+            // Maintain internal linkage
+            if i == old {
+                continue;
+            }
             self.vertices[i].relink_out(old, new);
             self.vertices[new].link_in(i);
         }
@@ -283,37 +359,49 @@ impl<T> Graph<T> {
     pub fn relink_out(&mut self, old: IndexType, new: IndexType) {
         let outset: Vec<IndexType> = self.vertices[old].edge_iter(true).collect();
         for i in outset {
+            // Maintain internal linkage
+            if i == old {
+                continue;
+            }
             self.vertices[i].relink_in(old, new);
             self.vertices[new].link_out(i);
         }
     }
     // Re(place) all links outgoing from a set of nodes with a new node
-    // Old nodes maintains outgoing connections
+    // Old nodes maintain internal linkage
     pub fn relink_out_multiple(&mut self, old: &[IndexType], new: IndexType) {
         let mut outset: Vec<IndexType> = vec![];
+        let oldset = BTreeSet::from_iter(old.iter().copied());
         for i in old {
             for ii in self.vertices[*i].edge_iter(true) {
-                outset.push(ii);
+                if !oldset.contains(&ii) {
+                    outset.push(ii);
+                }
             }
         }
         outset.sort();
         outset.dedup();
+
         for i in outset {
             self.vertices[i].relink_in_multiple(old, new);
             self.vertices[new].link_out(i);
         }
     }
     // Re(place) all links incoming to a set of nodes with a new node
-    // Old nodes maintains incoming connections
+    // Old nodes maintain internal linkage
     pub fn relink_in_multiple(&mut self, old: &[IndexType], new: IndexType) {
         let mut inset: Vec<IndexType> = vec![];
+        let oldset = BTreeSet::from_iter(old.iter().copied());
         for i in old {
             for ii in self.vertices[*i].edge_iter(false) {
-                inset.push(ii);
+                if !oldset.contains(&ii) {
+                    inset.push(ii);
+                }
             }
         }
         inset.sort();
         inset.dedup();
+
         for i in inset {
             self.vertices[i].relink_out_multiple(old, new);
             self.vertices[new].link_in(i);
@@ -509,5 +597,22 @@ impl PostorderIterator {
         }
 
         self.path.pop()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_graph_basic() {
+        let mut gr: Graph<i32> = Graph::default();
+
+        gr.add_vert(0);
+        gr.add_vert(1);
+        gr.add_vert(2);
+        gr.add_vert(3);
+        gr.add_vert(4);
+        gr.add_vert(5);
     }
 }
